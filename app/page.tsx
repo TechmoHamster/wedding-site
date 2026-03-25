@@ -3,7 +3,17 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Script from "next/script";
 import type { FormConfig, FormField } from "@/lib/types";
-import { COUNTRY_OPTIONS, getStateOptionsForCountry, normalizeCountryName } from "@/lib/addressOptions";
+import { COUNTRY_OPTIONS, getCountryCode, getStateOptionsForCountry, normalizeCountryName } from "@/lib/addressOptions";
+import {
+  DEFAULT_PHONE_COUNTRY,
+  PHONE_COUNTRIES,
+  getDialCode,
+  inferCountryAndNational,
+  isValidInternationalPhone,
+  parseStoredPhoneToUi,
+  toE164FromUi,
+} from "@/lib/phone";
+import type { CountryCode } from "libphonenumber-js";
 
 type StatusType = "" | "error" | "success";
 
@@ -23,6 +33,13 @@ type AddressVerifyResponse = {
   suggestion?: AddressSuggestion;
 };
 
+type AddressPrediction = {
+  placeId: string;
+  description: string;
+  mainText: string;
+  secondaryText: string;
+};
+
 const EMPTY_OPTION_VALUE = "";
 
 const FALLBACK_BRANDING = {
@@ -37,6 +54,7 @@ const SHOW_TOP_NAV_LINKS = false;
 const SHOW_ADMIN_BUTTON = false;
 const CENTER_BRAND_ONLY = !SHOW_TOP_NAV_LINKS && !SHOW_ADMIN_BUTTON;
 const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "";
+const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
 
 function getDefaultValue(field: FormField): string {
   if (field.defaultValue) return field.defaultValue;
@@ -53,12 +71,6 @@ function isVisibleField(field: FormField, values: Record<string, string>): boole
 
 function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function isValidPhone(value: string): boolean {
-  const digits = value.replace(/\D/g, "");
-  if (digits.length === 10) return true;
-  return digits.length === 11 && digits.startsWith("1");
 }
 
 function validateField(field: FormField, values: Record<string, string>): string {
@@ -84,7 +96,7 @@ function validateField(field: FormField, values: Record<string, string>): string
     return `${field.label} must be a valid email address.`;
   }
 
-  if (value && field.type === "tel" && !isValidPhone(value)) {
+  if (value && field.type === "tel" && !isValidInternationalPhone(value)) {
     return `${field.label} must be a valid phone number.`;
   }
 
@@ -131,11 +143,30 @@ export default function RsvpPage() {
   const [addressVerifyStatus, setAddressVerifyStatus] = useState("");
   const [addressVerifyLoading, setAddressVerifyLoading] = useState(false);
   const [addressSuggestion, setAddressSuggestion] = useState<AddressSuggestion | null>(null);
+  const [allowUnverifiedAddress, setAllowUnverifiedAddress] = useState(false);
+  const [googlePlacesReady, setGooglePlacesReady] = useState(false);
+  const [addressPredictions, setAddressPredictions] = useState<AddressPrediction[]>([]);
+  const [showAddressPredictions, setShowAddressPredictions] = useState(false);
+  const [phoneCountry, setPhoneCountry] = useState<CountryCode>(DEFAULT_PHONE_COUNTRY);
+  const [phoneNationalNumber, setPhoneNationalNumber] = useState("");
 
   const captchaRequired = Boolean(TURNSTILE_SITE_KEY);
   const isTurnstileVerified = !captchaRequired || Boolean(turnstileToken);
   const selectedCountry = normalizeCountryName(values.country || "United States");
   const stateOptions = useMemo(() => getStateOptionsForCountry(selectedCountry), [selectedCountry]);
+  const phoneCountryOptions = useMemo(() => {
+    const displayNames = typeof Intl !== "undefined" && "DisplayNames" in Intl
+      ? new Intl.DisplayNames(["en"], { type: "region" })
+      : null;
+
+    return PHONE_COUNTRIES.map((code) => {
+      const name = displayNames?.of(code) || code;
+      return {
+        code,
+        label: `${name} (${getDialCode(code)})`,
+      };
+    });
+  }, []);
 
   const trackEvent = (event: string, payload: Record<string, unknown> = {}) => {
     void fetch("/api/telemetry", {
@@ -209,6 +240,10 @@ export default function RsvpPage() {
 
         setConfig(nextConfig);
         setValues(initialValues);
+
+        const phoneUi = parseStoredPhoneToUi(initialValues.phone || "", DEFAULT_PHONE_COUNTRY);
+        setPhoneCountry(phoneUi.country);
+        setPhoneNationalNumber(phoneUi.nationalNumber);
       } catch (error) {
         setStatusType("error");
         setStatusMessage(error instanceof Error ? error.message : "Failed to load form");
@@ -252,6 +287,110 @@ export default function RsvpPage() {
     [config],
   );
 
+  const parseAddressComponents = (components: Array<{ long_name?: string; short_name?: string; types?: string[] }> = []) => {
+    const find = (type: string, key: "long_name" | "short_name" = "long_name") =>
+      components.find((c) => Array.isArray(c.types) && c.types.includes(type))?.[key] || "";
+
+    const streetNumber = find("street_number");
+    const route = find("route");
+    const locality = find("locality") || find("postal_town") || find("sublocality") || find("administrative_area_level_2");
+    const adminLevel1 = find("administrative_area_level_1", "long_name");
+    const postalCode = find("postal_code");
+    const countryLong = find("country", "long_name");
+
+    return {
+      street1: [streetNumber, route].filter(Boolean).join(" ").trim(),
+      city: locality,
+      state: adminLevel1,
+      postalCode,
+      country: normalizeCountryName(countryLong || selectedCountry),
+    };
+  };
+
+  const selectPrediction = (placeId: string) => {
+    const maps = (window as Window & { google?: any }).google?.maps;
+    if (!maps?.places) return;
+
+    const service = new maps.places.PlacesService(document.createElement("div"));
+    service.getDetails(
+      {
+        placeId,
+        fields: ["address_components"],
+      },
+      (place: any, status: any) => {
+        if (status !== maps.places.PlacesServiceStatus.OK || !place?.address_components) return;
+        const parts = parseAddressComponents(place.address_components);
+
+        setValues((prev) => {
+          const next = { ...prev };
+          next.street1 = parts.street1 || next.street1 || "";
+          next.city = parts.city || next.city || "";
+          next.country = normalizeCountryName(parts.country || next.country || "United States");
+          const options = getStateOptionsForCountry(next.country);
+          next.state = parts.state || next.state || "";
+          if (options.length > 0 && !options.includes(next.state)) {
+            next.state = EMPTY_OPTION_VALUE;
+          }
+          next.postalCode = parts.postalCode || next.postalCode || "";
+
+          if (config) {
+            setFieldErrors(computeErrors(config.fields, next, touched));
+          }
+
+          return next;
+        });
+
+        setShowAddressPredictions(false);
+        setAddressPredictions([]);
+        setAddressVerifyStatus("");
+        setAddressSuggestion(null);
+        setAllowUnverifiedAddress(false);
+      },
+    );
+  };
+
+  useEffect(() => {
+    if (!GOOGLE_MAPS_API_KEY || !googlePlacesReady) return;
+
+    const maps = (window as Window & { google?: any }).google?.maps;
+    if (!maps?.places?.AutocompleteService) return;
+
+    const input = (values.street1 || "").trim();
+    if (input.length < 3) {
+      setAddressPredictions([]);
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      const service = new maps.places.AutocompleteService();
+      const countryCode = getCountryCode(selectedCountry);
+      service.getPlacePredictions(
+        {
+          input,
+          types: ["address"],
+          componentRestrictions: countryCode ? { country: countryCode } : undefined,
+        },
+        (predictions: any[] | null, status: any) => {
+          if (status !== maps.places.PlacesServiceStatus.OK || !predictions?.length) {
+            setAddressPredictions([]);
+            return;
+          }
+
+          const nextPredictions: AddressPrediction[] = predictions.slice(0, 5).map((prediction) => ({
+            placeId: String(prediction.place_id || ""),
+            description: String(prediction.description || ""),
+            mainText: String(prediction.structured_formatting?.main_text || prediction.description || ""),
+            secondaryText: String(prediction.structured_formatting?.secondary_text || ""),
+          })).filter((item) => item.placeId);
+
+          setAddressPredictions(nextPredictions);
+        },
+      );
+    }, 170);
+
+    return () => window.clearTimeout(timeout);
+  }, [values.street1, selectedCountry, googlePlacesReady]);
+
   const updateFieldValue = (fieldId: string, nextValue: string) => {
     if (!hasTrackedStart) {
       setHasTrackedStart(true);
@@ -292,6 +431,39 @@ export default function RsvpPage() {
     if (["street1", "city", "state", "postalCode", "country"].includes(fieldId)) {
       setAddressVerifyStatus("");
       setAddressSuggestion(null);
+      setAllowUnverifiedAddress(false);
+    }
+
+    if (fieldId === "street1") {
+      setShowAddressPredictions(true);
+    }
+
+    setStatusMessage("");
+    setStatusType("");
+  };
+
+  const updatePhoneFromParts = (country: CountryCode, rawNumber: string) => {
+    const normalized = toE164FromUi(country, rawNumber);
+    setValues((prev) => ({ ...prev, phone: normalized || "" }));
+  };
+
+  const handlePhoneCountryChange = (nextCountry: string) => {
+    const normalizedCountry = (nextCountry || DEFAULT_PHONE_COUNTRY) as CountryCode;
+    setPhoneCountry(normalizedCountry);
+    updatePhoneFromParts(normalizedCountry, phoneNationalNumber);
+    setStatusMessage("");
+    setStatusType("");
+  };
+
+  const handlePhoneNationalChange = (rawValue: string) => {
+    if (rawValue.startsWith("+")) {
+      const inferred = inferCountryAndNational(rawValue, phoneCountry);
+      setPhoneCountry(inferred.country);
+      setPhoneNationalNumber(inferred.nationalNumber);
+      updatePhoneFromParts(inferred.country, inferred.nationalNumber);
+    } else {
+      setPhoneNationalNumber(rawValue);
+      updatePhoneFromParts(phoneCountry, rawValue);
     }
 
     setStatusMessage("");
@@ -322,10 +494,16 @@ export default function RsvpPage() {
     }
 
     setValues(nextValues);
+    const phoneUi = parseStoredPhoneToUi(nextValues.phone || "", DEFAULT_PHONE_COUNTRY);
+    setPhoneCountry(phoneUi.country);
+    setPhoneNationalNumber(phoneUi.nationalNumber);
     setTouched({});
     setFieldErrors({});
     setAddressVerifyStatus("");
     setAddressSuggestion(null);
+    setAddressPredictions([]);
+    setShowAddressPredictions(false);
+    setAllowUnverifiedAddress(false);
   };
 
   const handleSubmitAnother = () => {
@@ -335,6 +513,9 @@ export default function RsvpPage() {
     setLastSubmissionId("");
     setTurnstileToken("");
     setTurnstileError("");
+    setAddressPredictions([]);
+    setShowAddressPredictions(false);
+    setAllowUnverifiedAddress(false);
     const t = (window as Window & { turnstile?: { reset: () => void } }).turnstile;
     if (t && typeof t.reset === "function") t.reset();
     resetToDefaults();
@@ -343,24 +524,24 @@ export default function RsvpPage() {
   const handleEditLastResponse = () => {
     if (!lastSubmittedValues || !config) return;
     setValues(lastSubmittedValues);
+    const phoneUi = parseStoredPhoneToUi(lastSubmittedValues.phone || "", DEFAULT_PHONE_COUNTRY);
+    setPhoneCountry(phoneUi.country);
+    setPhoneNationalNumber(phoneUi.nationalNumber);
     setTouched({});
     setFieldErrors({});
     setStatusMessage("");
     setStatusType("");
     setShowSuccessAnimation(false);
+    setAddressPredictions([]);
+    setShowAddressPredictions(false);
+    setAllowUnverifiedAddress(false);
   };
 
-  const handleAddressVerify = async () => {
+  const verifyAddress = async (): Promise<Partial<AddressVerifyResponse> | null> => {
     const street1 = (values.street1 || "").trim();
-    if (!street1) {
-      setAddressVerifyStatus("Enter a street address first.");
-      setAddressSuggestion(null);
-      return;
-    }
+    if (!street1) return null;
 
     setAddressVerifyLoading(true);
-    setAddressVerifyStatus("");
-    setAddressSuggestion(null);
 
     try {
       const response = await fetch("/api/address/verify", {
@@ -376,26 +557,14 @@ export default function RsvpPage() {
       });
 
       const payload = (await response.json().catch(() => ({}))) as Partial<AddressVerifyResponse>;
-
       if (!response.ok) {
         throw new Error(typeof payload.message === "string" ? payload.message : "Unable to verify address right now.");
       }
 
-      if (payload.matchType === "confirmed") {
-        setAddressVerifyStatus(payload.message || "Address confirmed.");
-        if (payload.suggestion) setAddressSuggestion(payload.suggestion);
-        return;
-      }
-
-      if (payload.matchType === "suggested" && payload.suggestion) {
-        setAddressVerifyStatus(payload.message || "We found a suggested address.");
-        setAddressSuggestion(payload.suggestion);
-        return;
-      }
-
-      setAddressVerifyStatus(payload.message || "We could not verify the address.");
+      return payload;
     } catch (error) {
       setAddressVerifyStatus(error instanceof Error ? error.message : "Unable to verify address right now.");
+      return null;
     } finally {
       setAddressVerifyLoading(false);
     }
@@ -424,6 +593,12 @@ export default function RsvpPage() {
 
     setAddressVerifyStatus("Suggested address applied.");
     setAddressSuggestion(null);
+    setAllowUnverifiedAddress(false);
+  };
+
+  const useEnteredAddress = () => {
+    setAddressVerifyStatus("Keeping the address as entered.");
+    setAllowUnverifiedAddress(true);
   };
 
 
@@ -454,10 +629,30 @@ export default function RsvpPage() {
       return;
     }
 
+    if (!allowUnverifiedAddress && (values.street1 || "").trim()) {
+      const verification = await verifyAddress();
+      if (verification?.matchType === "suggested" && verification.suggestion) {
+        setAddressSuggestion(verification.suggestion);
+        setAddressVerifyStatus(
+          `You typed: ${(values.street1 || "").trim()}, ${(values.city || "").trim()}, ${(values.state || "").trim()} ${(values.postalCode || "").trim()}. Recommended: ${verification.suggestion.formatted}`,
+        );
+        setStatusType("error");
+        setStatusMessage("Please choose recommended address or keep your entered address before submitting.");
+        return;
+      }
+
+      if (verification?.matchType === "confirmed") {
+        setAddressVerifyStatus("Address confirmed.");
+      }
+    }
+
     setSubmitting(true);
     setStatusMessage("");
     setStatusType("");
     setShowSuccessAnimation(false);
+    setAddressPredictions([]);
+    setShowAddressPredictions(false);
+    setAllowUnverifiedAddress(false);
 
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -510,6 +705,13 @@ export default function RsvpPage() {
     <main className="rsvp-page">
       {captchaRequired && (
         <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js" strategy="afterInteractive" />
+      )}
+      {GOOGLE_MAPS_API_KEY && (
+        <Script
+          src={`https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`}
+          strategy="afterInteractive"
+          onLoad={() => setGooglePlacesReady(true)}
+        />
       )}
       <section className="rsvp-stage-wrap">
         <section className="rsvp-hero-stage">
@@ -651,6 +853,48 @@ export default function RsvpPage() {
                             );
                           }
 
+                          if (field.id === "phone") {
+                            return (
+                              <div key={field.id} className={`${fieldClass} rsvp-phone-field`.trim()}>
+                                <span>{field.label}</span>
+                                <div className="rsvp-phone-grid">
+                                  <label className="rsvp-phone-code">
+                                    Country Code
+                                    <select
+                                      name="phoneCountry"
+                                      value={phoneCountry}
+                                      onChange={(e) => handlePhoneCountryChange(e.target.value)}
+                                      onBlur={() => markTouched(field.id)}
+                                      disabled={!visible || submitting || loading}
+                                    >
+                                      {phoneCountryOptions.map((option) => (
+                                        <option key={option.code} value={option.code}>{option.label}</option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="rsvp-phone-number">
+                                    Phone Number
+                                    <input
+                                      type="tel"
+                                      name="phoneNational"
+                                      value={phoneNationalNumber}
+                                      onChange={(e) => handlePhoneNationalChange(e.target.value)}
+                                      onBlur={() => markTouched(field.id)}
+                                      placeholder="Phone number"
+                                      autoComplete={field.autocomplete || "tel-national"}
+                                      aria-invalid={error ? "true" : "false"}
+                                      aria-describedby={describedBy}
+                                      required={visible && field.required}
+                                      disabled={!visible || submitting || loading}
+                                    />
+                                  </label>
+                                </div>
+                                <p className="rsvp-phone-preview">Stored as: {values.phone || `${getDialCode(phoneCountry)} ...`}</p>
+                                {error && <p id={`${field.id}-error`} className="rsvp-field-error" aria-live="polite">{error}</p>}
+                              </div>
+                            );
+                          }
+
                           if (isSelectLikeField) {
                             const value = values[field.id] || (isCountryField ? "United States" : getDefaultValue(field));
                             const placeholderText = isCountryField
@@ -697,7 +941,11 @@ export default function RsvpPage() {
                                     name={field.id}
                                     value={values[field.id] || ""}
                                     onChange={(e) => updateFieldValue(field.id, e.target.value)}
-                                    onBlur={() => markTouched(field.id)}
+                                    onBlur={() => {
+                                      markTouched(field.id);
+                                      window.setTimeout(() => setShowAddressPredictions(false), 150);
+                                    }}
+                                    onFocus={() => setShowAddressPredictions(true)}
                                     placeholder={field.placeholder || undefined}
                                     autoComplete={field.autocomplete || undefined}
                                     aria-invalid={error ? "true" : "false"}
@@ -708,32 +956,49 @@ export default function RsvpPage() {
                                 </label>
                                 {error && <p id={`${field.id}-error`} className="rsvp-field-error" aria-live="polite">{error}</p>}
 
-                                {visible && (
-                                  <div className="rsvp-address-verify-wrap">
-                                    <button
-                                      type="button"
-                                      className="rsvp-address-verify-btn"
-                                      onClick={handleAddressVerify}
-                                      disabled={addressVerifyLoading || submitting || loading}
-                                    >
-                                      {addressVerifyLoading ? "Checking Address..." : "Verify Address"}
-                                    </button>
-                                    {addressVerifyStatus && <p className="rsvp-address-verify-status">{addressVerifyStatus}</p>}
-                                    {addressSuggestion && (
-                                      <div className="rsvp-address-suggestion">
-                                        <p>Suggested: {addressSuggestion.formatted || `${addressSuggestion.street1}, ${addressSuggestion.city}`}</p>
+                                {showAddressPredictions && addressPredictions.length > 0 && (
+                                  <div className="rsvp-address-predictions" role="listbox" aria-label="Suggested addresses">
+                                    {addressPredictions.map((prediction) => (
+                                      <button
+                                        type="button"
+                                        key={prediction.placeId}
+                                        className="rsvp-address-prediction"
+                                        onMouseDown={(event) => event.preventDefault()}
+                                        onClick={() => selectPrediction(prediction.placeId)}
+                                      >
+                                        <span>{prediction.mainText}</span>
+                                        {prediction.secondaryText && <small>{prediction.secondaryText}</small>}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+
+                                <div className="rsvp-address-verify-wrap">
+                                  {addressVerifyStatus && <p className="rsvp-address-verify-status">{addressVerifyStatus}</p>}
+                                  {addressSuggestion && (
+                                    <div className="rsvp-address-suggestion">
+                                      <p>Recommended: {addressSuggestion.formatted || `${addressSuggestion.street1}, ${addressSuggestion.city}`}</p>
+                                      <div className="rsvp-address-actions">
                                         <button
                                           type="button"
                                           className="rsvp-address-use-btn"
                                           onClick={useSuggestedAddress}
                                           disabled={addressVerifyLoading || submitting || loading}
                                         >
-                                          Use Suggested Address
+                                          Use Recommended
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="rsvp-address-keep-btn"
+                                          onClick={useEnteredAddress}
+                                          disabled={addressVerifyLoading || submitting || loading}
+                                        >
+                                          Keep Entered Address
                                         </button>
                                       </div>
-                                    )}
-                                  </div>
-                                )}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             );
                           }

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { FormConfig, FormField, Settings, SubmissionRecord } from "@/lib/types";
+import { isValidInternationalPhone } from "@/lib/phone";
 
 const ROOT_DIR = process.cwd();
 const DATA_DIR = path.join(ROOT_DIR, "data");
@@ -95,12 +96,6 @@ function sanitizeString(value: unknown, maxLength = 500): string {
 function isValidEmail(value: string): boolean {
   // Practical email pattern for RSVP intake.
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-function isValidPhone(value: string): boolean {
-  const digits = value.replace(/\D/g, "");
-  if (digits.length === 10) return true;
-  return digits.length === 11 && digits.startsWith("1");
 }
 
 function normalizeId(value: unknown): string {
@@ -346,7 +341,7 @@ export function validateSubmission(values: Record<string, string>, settings: Set
       continue;
     }
 
-    if (value && field.type === "tel" && !isValidPhone(value)) {
+    if (value && field.type === "tel" && !isValidInternationalPhone(value)) {
       errors.push(`${field.label} must be a valid phone number.`);
     }
   }

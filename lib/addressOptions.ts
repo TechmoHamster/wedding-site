@@ -194,3 +194,15 @@ export function normalizeStateForCountry(state: string, country: string): string
   const match = options.find((option) => option.toLowerCase() === trimmed.toLowerCase());
   return match || trimmed;
 }
+
+
+export function getCountryNameFromCode(code: string, fallback = "United States"): string {
+  const normalized = (code || "").trim().toLowerCase();
+  if (!normalized) return normalizeCountryName(fallback);
+
+  for (const [name, value] of Object.entries(COUNTRY_CODE_MAP)) {
+    if (value === normalized) return name;
+  }
+
+  return normalizeCountryName(fallback);
+}

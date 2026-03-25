@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { getCountryCode, normalizeCountryName, normalizeStateForCountry } from "@/lib/addressOptions";
+import {
+  getCountryCode,
+  getCountryNameFromCode,
+  normalizeCountryName,
+  normalizeStateForCountry,
+} from "@/lib/addressOptions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,21 +17,13 @@ type VerifyPayload = {
   country?: string;
 };
 
-type NominatimItem = {
-  display_name?: string;
-  address?: {
-    house_number?: string;
-    road?: string;
-    city?: string;
-    town?: string;
-    village?: string;
-    municipality?: string;
-    county?: string;
-    state?: string;
-    province?: string;
-    postcode?: string;
-    country?: string;
-  };
+type Suggestion = {
+  street1: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  formatted: string;
 };
 
 function clean(value: unknown): string {
@@ -37,25 +34,31 @@ function normalizeCompare(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-function pickCity(item: NominatimItem): string {
-  return (
-    item.address?.city ||
-    item.address?.town ||
-    item.address?.village ||
-    item.address?.municipality ||
-    item.address?.county ||
-    ""
-  ).trim();
+function buildFormattedSuggestion(suggestion: Suggestion): string {
+  return [suggestion.street1, suggestion.city, suggestion.state, suggestion.postalCode, suggestion.country]
+    .filter(Boolean)
+    .join(", ");
 }
 
-function pickState(item: NominatimItem): string {
-  return (item.address?.state || item.address?.province || "").trim();
-}
+function scoreMatch(submitted: VerifyPayload, suggestion: Suggestion): number {
+  const checks: Array<[string, string]> = [
+    [clean(submitted.street1), suggestion.street1],
+    [clean(submitted.city), suggestion.city],
+    [clean(submitted.state), suggestion.state],
+    [clean(submitted.postalCode), suggestion.postalCode],
+    [normalizeCountryName(clean(submitted.country || "United States")), suggestion.country],
+  ];
 
-function buildStreet(item: NominatimItem): string {
-  const houseNumber = (item.address?.house_number || "").trim();
-  const road = (item.address?.road || "").trim();
-  return [houseNumber, road].filter(Boolean).join(" ").trim();
+  let compared = 0;
+  let exact = 0;
+
+  for (const [a, b] of checks) {
+    if (!a || !b) continue;
+    compared += 1;
+    if (normalizeCompare(a) === normalizeCompare(b)) exact += 1;
+  }
+
+  return compared > 0 ? exact / compared : 0;
 }
 
 export async function POST(request: Request) {
@@ -70,31 +73,42 @@ export async function POST(request: Request) {
   const city = clean(payload.city);
   const state = clean(payload.state);
   const postalCode = clean(payload.postalCode);
-  const country = normalizeCountryName(clean(payload.country));
+  const country = normalizeCountryName(clean(payload.country || "United States"));
 
   if (!street1) {
     return NextResponse.json({ error: "Street address is required for verification." }, { status: 400 });
   }
 
-  const query = [street1, city, state, postalCode, country].filter(Boolean).join(", ");
-  const params = new URLSearchParams({
-    q: query,
-    format: "jsonv2",
-    addressdetails: "1",
-    limit: "1",
-  });
+  const apiKey = clean(process.env.GOOGLE_ADDRESS_VALIDATION_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY);
+  if (!apiKey) {
+    return NextResponse.json(
+      {
+        ok: false,
+        matchType: "unavailable",
+        message: "Address validation service is not configured.",
+      },
+      { status: 200 },
+    );
+  }
 
-  const countryCode = getCountryCode(country);
-  if (countryCode) params.set("countrycodes", countryCode);
-
-  let candidate: NominatimItem | null = null;
+  const regionCode = getCountryCode(country).toUpperCase() || "US";
 
   try {
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+    const response = await fetch(`https://addressvalidation.googleapis.com/v1:validateAddress?key=${encodeURIComponent(apiKey)}`, {
+      method: "POST",
       headers: {
-        "Accept": "application/json",
-        "User-Agent": "wedding-rsvp-address-check/1.0",
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        address: {
+          regionCode,
+          locality: city || undefined,
+          administrativeArea: state || undefined,
+          postalCode: postalCode || undefined,
+          addressLines: [street1],
+        },
+        enableUspsCass: regionCode === "US",
+      }),
       cache: "no-store",
     });
 
@@ -109,10 +123,66 @@ export async function POST(request: Request) {
       );
     }
 
-    const results = (await response.json()) as NominatimItem[];
-    if (Array.isArray(results) && results.length > 0) {
-      candidate = results[0];
+    const data = (await response.json()) as {
+      result?: {
+        verdict?: {
+          addressComplete?: boolean;
+          hasUnconfirmedComponents?: boolean;
+        };
+        address?: {
+          formattedAddress?: string;
+          postalAddress?: {
+            addressLines?: string[];
+            locality?: string;
+            administrativeArea?: string;
+            postalCode?: string;
+            regionCode?: string;
+          };
+        };
+      };
+    };
+
+    const postalAddress = data.result?.address?.postalAddress;
+    const suggestedCountry = getCountryNameFromCode(postalAddress?.regionCode || regionCode, country);
+
+    const suggestion: Suggestion = {
+      street1: clean(postalAddress?.addressLines?.[0] || street1),
+      city: clean(postalAddress?.locality || city),
+      state: normalizeStateForCountry(clean(postalAddress?.administrativeArea || state), suggestedCountry),
+      postalCode: clean(postalAddress?.postalCode || postalCode),
+      country: suggestedCountry,
+      formatted: clean(data.result?.address?.formattedAddress || ""),
+    };
+
+    if (!suggestion.formatted) {
+      suggestion.formatted = buildFormattedSuggestion(suggestion);
     }
+
+    const confidence = scoreMatch(payload, suggestion);
+    const verdict = data.result?.verdict;
+    const likelyConfirmed = Boolean(verdict?.addressComplete) && !verdict?.hasUnconfirmedComponents;
+
+    if (likelyConfirmed || confidence >= 0.85) {
+      return NextResponse.json(
+        {
+          ok: true,
+          matchType: "confirmed",
+          message: "Address confirmed.",
+          suggestion,
+        },
+        { status: 200 },
+      );
+    }
+
+    return NextResponse.json(
+      {
+        ok: true,
+        matchType: "suggested",
+        message: "We found a recommended standardized address.",
+        suggestion,
+      },
+      { status: 200 },
+    );
   } catch {
     return NextResponse.json(
       {
@@ -123,65 +193,4 @@ export async function POST(request: Request) {
       { status: 200 },
     );
   }
-
-  if (!candidate) {
-    return NextResponse.json(
-      {
-        ok: false,
-        matchType: "not_found",
-        message: "We could not verify that address. Please review and try again.",
-      },
-      { status: 200 },
-    );
-  }
-
-  const suggestion = {
-    street1: buildStreet(candidate),
-    city: pickCity(candidate),
-    state: normalizeStateForCountry(pickState(candidate), country),
-    postalCode: (candidate.address?.postcode || "").trim(),
-    country: normalizeCountryName(candidate.address?.country || country),
-    formatted: clean(candidate.display_name),
-  };
-
-  const checks = [
-    [street1, suggestion.street1],
-    [city, suggestion.city],
-    [state, suggestion.state],
-    [postalCode, suggestion.postalCode],
-    [country, suggestion.country],
-  ] as const;
-
-  let compared = 0;
-  let exact = 0;
-
-  for (const [submitted, normalized] of checks) {
-    if (!submitted || !normalized) continue;
-    compared += 1;
-    if (normalizeCompare(submitted) === normalizeCompare(normalized)) exact += 1;
-  }
-
-  const confidence = compared > 0 ? exact / compared : 0;
-
-  if (confidence >= 0.85) {
-    return NextResponse.json(
-      {
-        ok: true,
-        matchType: "confirmed",
-        message: "Address confirmed.",
-        suggestion,
-      },
-      { status: 200 },
-    );
-  }
-
-  return NextResponse.json(
-    {
-      ok: true,
-      matchType: "suggested",
-      message: "We found a suggested standardized address.",
-      suggestion,
-    },
-    { status: 200 },
-  );
 }

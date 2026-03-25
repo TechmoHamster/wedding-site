@@ -373,6 +373,28 @@ a {
   letter-spacing: 0.03em;
 }
 
+.rsvp-phone-field {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.rsvp-phone-grid {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.9fr) 1.1fr;
+  gap: 0.5rem;
+}
+
+.rsvp-phone-grid label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.rsvp-phone-preview {
+  margin: 0;
+  color: rgba(244, 236, 232, 0.84);
+  font-size: 0.72rem;
+}
+
 .rsvp-field input,
 .rsvp-field textarea,
 .rsvp-field select {
@@ -472,7 +494,8 @@ a {
 }
 
 .rsvp-address-verify-btn,
-.rsvp-address-use-btn {
+.rsvp-address-use-btn,
+.rsvp-address-keep-btn {
   border: 1px solid rgba(220, 161, 161, 0.45);
   border-radius: 999px;
   background: rgba(65, 53, 51, 0.55);
@@ -487,7 +510,8 @@ a {
 }
 
 .rsvp-address-verify-btn:disabled,
-.rsvp-address-use-btn:disabled {
+.rsvp-address-use-btn:disabled,
+.rsvp-address-keep-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
 }
@@ -512,6 +536,43 @@ a {
   font-size: 0.78rem;
   color: #f2e7e2;
   line-height: 1.35;
+}
+
+.rsvp-address-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.rsvp-address-predictions {
+  display: grid;
+  gap: 0.25rem;
+  border: 1px solid rgba(220, 161, 161, 0.34);
+  border-radius: 0.62rem;
+  background: rgba(30, 22, 24, 0.92);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.rsvp-address-prediction {
+  border: 0;
+  border-radius: 0;
+  text-align: left;
+  padding: 0.58rem 0.66rem;
+  color: #f5ece8;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  gap: 0.1rem;
+}
+
+.rsvp-address-prediction small {
+  color: rgba(235, 219, 214, 0.76);
+  font-size: 0.73rem;
+}
+
+.rsvp-address-prediction:hover {
+  background: rgba(220, 161, 161, 0.16);
 }
 
 .rsvp-form-card button {
@@ -592,7 +653,8 @@ a {
 .rsvp-success-reset,
 .rsvp-admin-link,
 .rsvp-address-verify-btn,
-.rsvp-address-use-btn {
+.rsvp-address-use-btn,
+.rsvp-address-keep-btn {
   transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease, background 180ms ease;
 }
 
@@ -601,7 +663,8 @@ a {
 .rsvp-success-edit:hover,
 .rsvp-admin-link:hover,
 .rsvp-address-verify-btn:hover,
-.rsvp-address-use-btn:hover {
+.rsvp-address-use-btn:hover,
+.rsvp-address-keep-btn:hover {
   transform: translateY(-1px);
   filter: brightness(1.06);
   box-shadow: 0 8px 18px rgba(20, 10, 12, 0.28);
@@ -612,7 +675,8 @@ a {
 .rsvp-success-edit:active,
 .rsvp-admin-link:active,
 .rsvp-address-verify-btn:active,
-.rsvp-address-use-btn:active {
+.rsvp-address-use-btn:active,
+.rsvp-address-keep-btn:active {
   transform: translateY(0);
   filter: brightness(0.98);
 }
@@ -953,6 +1017,10 @@ a {
 
   .rsvp-field-grid,
   .admin-grid-two {
+    grid-template-columns: 1fr;
+  }
+
+  .rsvp-phone-grid {
     grid-template-columns: 1fr;
   }
 
