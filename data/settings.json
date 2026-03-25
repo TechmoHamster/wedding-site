@@ -1,0 +1,196 @@
+{
+  "branding": {
+    "eyebrow": "Wedding Invite Details",
+    "title": "Share Your Address and RSVP",
+    "description": "Please share your mailing address and RSVP by September 12, 2026 so we can send your invitation and finalize headcount.",
+    "submitLabel": "Submit RSVP",
+    "successMessage": "Thanks. Your RSVP and address were saved successfully."
+  },
+  "fields": [
+    {
+      "id": "firstName",
+      "label": "First Name",
+      "type": "text",
+      "required": true,
+      "width": "half",
+      "placeholder": "",
+      "autocomplete": "given-name",
+      "defaultValue": ""
+    },
+    {
+      "id": "lastName",
+      "label": "Last Name",
+      "type": "text",
+      "required": true,
+      "width": "half",
+      "placeholder": "",
+      "autocomplete": "family-name",
+      "defaultValue": ""
+    },
+    {
+      "id": "email",
+      "label": "Email",
+      "type": "email",
+      "required": true,
+      "width": "full",
+      "placeholder": "",
+      "autocomplete": "email",
+      "defaultValue": ""
+    },
+    {
+      "id": "phone",
+      "label": "Phone Number",
+      "type": "tel",
+      "required": false,
+      "width": "full",
+      "placeholder": "",
+      "autocomplete": "tel",
+      "defaultValue": ""
+    },
+    {
+      "id": "smsOptIn",
+      "label": "Can this number receive text messages?",
+      "type": "radio",
+      "required": false,
+      "width": "full",
+      "placeholder": "",
+      "autocomplete": "",
+      "defaultValue": "",
+      "options": [
+        "Yes",
+        "No"
+      ]
+    },
+    {
+      "id": "street1",
+      "label": "Street Address",
+      "type": "text",
+      "required": true,
+      "width": "full",
+      "placeholder": "",
+      "autocomplete": "address-line1",
+      "defaultValue": ""
+    },
+    {
+      "id": "street2",
+      "label": "Apartment, Suite, etc. (optional)",
+      "type": "text",
+      "required": false,
+      "width": "full",
+      "placeholder": "",
+      "autocomplete": "address-line2",
+      "defaultValue": ""
+    },
+    {
+      "id": "city",
+      "label": "City",
+      "type": "text",
+      "required": true,
+      "width": "half",
+      "placeholder": "",
+      "autocomplete": "address-level2",
+      "defaultValue": ""
+    },
+    {
+      "id": "state",
+      "label": "State / Province",
+      "type": "text",
+      "required": true,
+      "width": "half",
+      "placeholder": "",
+      "autocomplete": "address-level1",
+      "defaultValue": ""
+    },
+    {
+      "id": "postalCode",
+      "label": "ZIP / Postal Code",
+      "type": "text",
+      "required": true,
+      "width": "half",
+      "placeholder": "",
+      "autocomplete": "postal-code",
+      "defaultValue": ""
+    },
+    {
+      "id": "country",
+      "label": "Country",
+      "type": "text",
+      "required": true,
+      "width": "half",
+      "placeholder": "",
+      "autocomplete": "country-name",
+      "defaultValue": "United States"
+    },
+    {
+      "id": "rsvp",
+      "label": "Will you attend?",
+      "type": "radio",
+      "required": true,
+      "width": "full",
+      "placeholder": "",
+      "autocomplete": "",
+      "defaultValue": "",
+      "options": [
+        "Yes",
+        "No",
+        "Maybe"
+      ]
+    },
+    {
+      "id": "guests",
+      "label": "Number of Guests",
+      "type": "select",
+      "required": true,
+      "width": "half",
+      "placeholder": "",
+      "autocomplete": "",
+      "defaultValue": "1",
+      "options": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5+"
+      ],
+      "showWhen": {
+        "fieldId": "rsvp",
+        "values": [
+          "Yes"
+        ]
+      }
+    },
+    {
+      "id": "dietaryNotes",
+      "label": "Dietary Notes (optional)",
+      "type": "textarea",
+      "required": false,
+      "width": "full",
+      "placeholder": "",
+      "autocomplete": "",
+      "defaultValue": "",
+      "showWhen": {
+        "fieldId": "rsvp",
+        "values": [
+          "Yes"
+        ]
+      }
+    },
+    {
+      "id": "message",
+      "label": "Message for the Couple (optional)",
+      "type": "textarea",
+      "required": false,
+      "width": "full",
+      "placeholder": "",
+      "autocomplete": "",
+      "defaultValue": ""
+    }
+  ],
+  "integrations": {
+    "googleSheetsWebhookUrl": "https://script.google.com/macros/s/AKfycbyxyKqdt1AjcQ-Tx52LeIrhlH9H2lvZmtqD2_0GXsi92dNUdaqh4d9v9FSA4yLlubA/exec",
+    "googleSheetsSecret": "",
+    "googleFormEnabled": false,
+    "googleFormActionUrl": "",
+    "googleFormFieldMap": {}
+  }
+}
