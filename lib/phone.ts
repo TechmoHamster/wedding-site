@@ -1,4 +1,5 @@
 import {
+  AsYouType,
   getCountries,
   getCountryCallingCode,
   parsePhoneNumberFromString,
@@ -65,6 +66,40 @@ export function inferCountryAndNational(
   }
 
   return { country: fallbackCountry, nationalNumber: input };
+}
+
+export function normalizeNationalNumberInput(
+  country: CountryCode,
+  rawInput: string,
+): PhoneUiState {
+  const input = (rawInput || "").trim();
+  if (!input) return { country, nationalNumber: "" };
+
+  if (input.startsWith("+")) {
+    return inferCountryAndNational(input, country);
+  }
+
+  const digitsOnly = input.replace(/\D/g, "");
+  if (!digitsOnly) return { country, nationalNumber: "" };
+
+  const parsedWithDialCode = parsePhoneNumberFromString(`+${digitsOnly}`);
+  if (parsedWithDialCode && parsedWithDialCode.country === country) {
+    return {
+      country,
+      nationalNumber: parsedWithDialCode.nationalNumber || digitsOnly,
+    };
+  }
+
+  return { country, nationalNumber: digitsOnly };
+}
+
+export function formatNationalNumberDisplay(
+  country: CountryCode,
+  nationalNumber: string,
+): string {
+  const digitsOnly = (nationalNumber || "").replace(/\D/g, "");
+  if (!digitsOnly) return "";
+  return new AsYouType(country).input(digitsOnly);
 }
 
 export function isValidInternationalPhone(value: string, defaultCountry: CountryCode = DEFAULT_PHONE_COUNTRY): boolean {

@@ -7,8 +7,9 @@ import { COUNTRY_OPTIONS, getCountryCode, getStateOptionsForCountry, normalizeCo
 import {
   DEFAULT_PHONE_COUNTRY,
   PHONE_COUNTRIES,
+  formatNationalNumberDisplay,
   getDialCode,
-  inferCountryAndNational,
+  normalizeNationalNumberInput,
   isValidInternationalPhone,
   parseStoredPhoneToUi,
   toE164FromUi,
@@ -503,15 +504,10 @@ export default function RsvpPage() {
   };
 
   const handlePhoneNationalChange = (rawValue: string) => {
-    if (rawValue.startsWith("+")) {
-      const inferred = inferCountryAndNational(rawValue, phoneCountry);
-      setPhoneCountry(inferred.country);
-      setPhoneNationalNumber(inferred.nationalNumber);
-      updatePhoneFromParts(inferred.country, inferred.nationalNumber);
-    } else {
-      setPhoneNationalNumber(rawValue);
-      updatePhoneFromParts(phoneCountry, rawValue);
-    }
+    const normalized = normalizeNationalNumberInput(phoneCountry, rawValue);
+    setPhoneCountry(normalized.country);
+    setPhoneNationalNumber(normalized.nationalNumber);
+    updatePhoneFromParts(normalized.country, normalized.nationalNumber);
 
     setStatusMessage("");
     setStatusType("");
@@ -794,7 +790,6 @@ export default function RsvpPage() {
                     </div>
                     <p className="rsvp-success-title">Sent Successfully</p>
                     <p className="rsvp-success-text">{statusMessage}</p>
-                    {lastSubmissionId && <p className="rsvp-success-id">Confirmation ID: {lastSubmissionId}</p>}
                     <div className="rsvp-success-actions">
                       <button type="button" className="rsvp-success-reset" onClick={handleSubmitAnother}>
                         Submit Another Response
@@ -892,7 +887,6 @@ export default function RsvpPage() {
                                   aria-describedby={describedBy}
                                   disabled={!visible || submitting || loading}
                                 />
-                                <span>{field.label}</span>
                                 {error && <p id={`${field.id}-error`} className="rsvp-field-error" aria-live="polite">{error}</p>}
                               </label>
                             );
@@ -901,7 +895,6 @@ export default function RsvpPage() {
                           if (field.id === "phone") {
                             return (
                               <div key={field.id} className={`${fieldClass} rsvp-phone-field`.trim()}>
-                                <span>{field.label}</span>
                                 <div className="rsvp-phone-grid">
                                   <label className="rsvp-phone-code">
                                     Country Code
@@ -918,11 +911,10 @@ export default function RsvpPage() {
                                     </select>
                                   </label>
                                   <label className="rsvp-phone-number">
-                                    Phone Number
                                     <input
                                       type="tel"
                                       name="phoneNational"
-                                      value={phoneNationalNumber}
+                                      value={formatNationalNumberDisplay(phoneCountry, phoneNationalNumber)}
                                       onChange={(e) => handlePhoneNationalChange(e.target.value)}
                                       onBlur={() => markTouched(field.id)}
                                       placeholder="Phone number"
@@ -934,7 +926,6 @@ export default function RsvpPage() {
                                     />
                                   </label>
                                 </div>
-                                <p className="rsvp-phone-preview">Stored as: {values.phone || `${getDialCode(phoneCountry)} ...`}</p>
                                 {error && <p id={`${field.id}-error`} className="rsvp-field-error" aria-live="polite">{error}</p>}
                               </div>
                             );
@@ -1094,6 +1085,7 @@ export default function RsvpPage() {
                           data-theme="light"
                           data-callback="__weddingTurnstileDone"
                           data-expired-callback="__weddingTurnstileExpired"
+                          data-size="flexible"
                         />
                         {!turnstileToken && !turnstileError && (
                           <p className="rsvp-field-hint">Please verify you are human to enable submit.</p>

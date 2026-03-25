@@ -287,13 +287,6 @@ a {
   line-height: 1.4;
 }
 
-.rsvp-success-id {
-  margin: 0;
-  color: #bceec3;
-  font-size: 0.86rem;
-  letter-spacing: 0.04em;
-}
-
 .rsvp-success-actions {
   display: flex;
   flex-wrap: wrap;
@@ -356,7 +349,15 @@ a {
 .rsvp-captcha-block {
   display: grid;
   gap: 0.35rem;
-  justify-items: start;
+  justify-items: stretch;
+}
+
+.rsvp-captcha-block .cf-turnstile {
+  width: 100%;
+}
+
+.rsvp-captcha-block iframe {
+  width: 100% !important;
 }
 
 .rsvp-field-grid {
@@ -387,12 +388,6 @@ a {
 .rsvp-phone-grid label {
   display: grid;
   gap: 0.3rem;
-}
-
-.rsvp-phone-preview {
-  margin: 0;
-  color: rgba(244, 236, 232, 0.84);
-  font-size: 0.72rem;
 }
 
 .rsvp-field input,
@@ -639,6 +634,10 @@ a {
   font-weight: 700;
   padding: 0.75rem 1rem;
   cursor: pointer;
+}
+
+.rsvp-form-card form > button[type="submit"] {
+  width: 100%;
 }
 
 .rsvp-success-animation {
