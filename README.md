@@ -41,17 +41,52 @@ In `/admin`, you can:
 ```javascript
 function doPost(e) {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  var body = JSON.parse(e.postData.contents || "{}");
-  var values = body.values || {};
+  var body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
+
+  if (body.mode === "duplicate_check") {
+    var lookup = body.lookup || {};
+    var firstName = String(lookup.firstName || "").trim().toLowerCase();
+    var lastName = String(lookup.lastName || "").trim().toLowerCase();
+    var email = String(lookup.email || "").trim().toLowerCase();
+
+    var values = sheet.getDataRange().getValues();
+    var duplicate = false;
+
+    // Assumes columns A/B/C are First Name / Last Name / Email.
+    for (var i = 1; i < values.length; i++) {
+      var rowFirst = String(values[i][0] || "").trim().toLowerCase();
+      var rowLast = String(values[i][1] || "").trim().toLowerCase();
+      var rowEmail = String(values[i][2] || "").trim().toLowerCase();
+
+      if (rowFirst === firstName && rowLast === lastName && rowEmail === email) {
+        duplicate = true;
+        break;
+      }
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ ok: true, mode: "duplicate_check", duplicate: duplicate }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
+  var valuesObj = body.values || {};
   sheet.appendRow([
-    body.submittedAt || "",
-    body.id || "",
-    values.firstName || "",
-    values.lastName || "",
-    values.email || "",
-    values.rsvp || "",
-    JSON.stringify(values)
+    valuesObj.firstName || "",
+    valuesObj.lastName || "",
+    valuesObj.email || "",
+    valuesObj.phone || "",
+    valuesObj.smsOptIn || "",
+    valuesObj.street1 || "",
+    valuesObj.street2 || "",
+    valuesObj.city || "",
+    valuesObj.postalCode || "",
+    valuesObj.state || "",
+    valuesObj.country || "",
+    valuesObj.rsvp || "",
+    valuesObj.guests || "",
+    valuesObj.message || "",
+    valuesObj.dietaryNotes || ""
   ]);
+
   return ContentService.createTextOutput(JSON.stringify({ ok: true }))
     .setMimeType(ContentService.MimeType.JSON);
 }

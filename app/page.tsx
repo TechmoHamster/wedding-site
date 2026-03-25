@@ -169,6 +169,11 @@ export default function RsvpPage() {
     });
   }, []);
 
+  const enteredAddressDisplay = useMemo(
+    () => [values.street1, values.city, values.state, values.postalCode, values.country].filter(Boolean).join(", "),
+    [values.street1, values.city, values.state, values.postalCode, values.country],
+  );
+
   const trackEvent = (event: string, payload: Record<string, unknown> = {}) => {
     void fetch("/api/telemetry", {
       method: "POST",
@@ -633,13 +638,13 @@ export default function RsvpPage() {
       return next;
     });
 
-    setAddressVerifyStatus("Suggested address applied.");
+    setAddressVerifyStatus("");
     setAddressSuggestion(null);
     setAllowUnverifiedAddress(false);
   };
 
   const useEnteredAddress = () => {
-    setAddressVerifyStatus("Keeping the address as entered.");
+    setAddressVerifyStatus("");
     setAllowUnverifiedAddress(true);
   };
 
@@ -675,16 +680,14 @@ export default function RsvpPage() {
       const verification = await verifyAddress();
       if (verification?.matchType === "suggested" && verification.suggestion) {
         setAddressSuggestion(verification.suggestion);
-        setAddressVerifyStatus(
-          `You typed: ${(values.street1 || "").trim()}, ${(values.city || "").trim()}, ${(values.state || "").trim()} ${(values.postalCode || "").trim()}. Recommended: ${verification.suggestion.formatted}`,
-        );
+        setAddressVerifyStatus("Review and choose one address option.");
         setStatusType("error");
         setStatusMessage("Please choose recommended address or keep your entered address before submitting.");
         return;
       }
 
       if (verification?.matchType === "confirmed") {
-        setAddressVerifyStatus("Address confirmed.");
+        setAddressVerifyStatus("");
       }
     }
 
@@ -976,71 +979,84 @@ export default function RsvpPage() {
                           if (field.id === "street1") {
                             return (
                               <div key={field.id} className={`${fieldClass} rsvp-address-block`.trim()}>
-                                <label>
+                                <label className="rsvp-address-label">
                                   {field.label}
-                                  <input
-                                    type={field.type}
-                                    name={field.id}
-                                    value={values[field.id] || ""}
-                                    onChange={(e) => updateFieldValue(field.id, e.target.value)}
-                                    onBlur={() => {
-                                      markTouched(field.id);
-                                      window.setTimeout(() => setShowAddressPredictions(false), 150);
-                                    }}
-                                    onFocus={() => setShowAddressPredictions(true)}
-                                    placeholder={field.placeholder || undefined}
-                                    autoComplete={field.autocomplete || undefined}
-                                    aria-invalid={error ? "true" : "false"}
-                                    aria-describedby={describedBy}
-                                    required={visible && field.required}
-                                    disabled={!visible || submitting || loading}
-                                  />
+                                  <div className="rsvp-address-input-wrap">
+                                    <input
+                                      type={field.type}
+                                      name={field.id}
+                                      value={values[field.id] || ""}
+                                      onChange={(e) => updateFieldValue(field.id, e.target.value)}
+                                      onBlur={() => {
+                                        markTouched(field.id);
+                                        window.setTimeout(() => setShowAddressPredictions(false), 150);
+                                      }}
+                                      onFocus={() => setShowAddressPredictions(true)}
+                                      placeholder={field.placeholder || undefined}
+                                      autoComplete={field.autocomplete || undefined}
+                                      aria-invalid={error ? "true" : "false"}
+                                      aria-describedby={describedBy}
+                                      required={visible && field.required}
+                                      disabled={!visible || submitting || loading}
+                                    />
+
+                                    {showAddressPredictions && addressPredictions.length > 0 && (
+                                      <div className="rsvp-address-predictions" role="listbox" aria-label="Suggested addresses">
+                                        {addressPredictions.map((prediction) => (
+                                          <button
+                                            type="button"
+                                            key={prediction.placeId}
+                                            className="rsvp-address-prediction"
+                                            onMouseDown={(event) => event.preventDefault()}
+                                            onClick={() => selectPrediction(prediction.placeId)}
+                                          >
+                                            <span>{prediction.mainText}</span>
+                                            {prediction.secondaryText && <small>{prediction.secondaryText}</small>}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
                                 </label>
                                 {error && <p id={`${field.id}-error`} className="rsvp-field-error" aria-live="polite">{error}</p>}
 
-                                {showAddressPredictions && addressPredictions.length > 0 && (
-                                  <div className="rsvp-address-predictions" role="listbox" aria-label="Suggested addresses">
-                                    {addressPredictions.map((prediction) => (
+                                {addressSuggestion && (
+                                  <div className="rsvp-address-review">
+                                    <p className="rsvp-address-review-title">We found a cleaner address format.</p>
+                                    <div className="rsvp-address-review-grid">
+                                      <div>
+                                        <small>You Entered</small>
+                                        <p>{enteredAddressDisplay || "(No address entered)"}</p>
+                                      </div>
+                                      <div>
+                                        <small>Recommended</small>
+                                        <p>{addressSuggestion.formatted || `${addressSuggestion.street1}, ${addressSuggestion.city}`}</p>
+                                      </div>
+                                    </div>
+                                    <div className="rsvp-address-actions">
                                       <button
                                         type="button"
-                                        key={prediction.placeId}
-                                        className="rsvp-address-prediction"
-                                        onMouseDown={(event) => event.preventDefault()}
-                                        onClick={() => selectPrediction(prediction.placeId)}
+                                        className="rsvp-address-use-btn"
+                                        onClick={useSuggestedAddress}
+                                        disabled={addressVerifyLoading || submitting || loading}
                                       >
-                                        <span>{prediction.mainText}</span>
-                                        {prediction.secondaryText && <small>{prediction.secondaryText}</small>}
+                                        Use Recommended
                                       </button>
-                                    ))}
+                                      <button
+                                        type="button"
+                                        className="rsvp-address-keep-btn"
+                                        onClick={useEnteredAddress}
+                                        disabled={addressVerifyLoading || submitting || loading}
+                                      >
+                                        Keep Mine
+                                      </button>
+                                    </div>
                                   </div>
                                 )}
 
-                                <div className="rsvp-address-verify-wrap">
-                                  {addressVerifyStatus && <p className="rsvp-address-verify-status">{addressVerifyStatus}</p>}
-                                  {addressSuggestion && (
-                                    <div className="rsvp-address-suggestion">
-                                      <p>Recommended: {addressSuggestion.formatted || `${addressSuggestion.street1}, ${addressSuggestion.city}`}</p>
-                                      <div className="rsvp-address-actions">
-                                        <button
-                                          type="button"
-                                          className="rsvp-address-use-btn"
-                                          onClick={useSuggestedAddress}
-                                          disabled={addressVerifyLoading || submitting || loading}
-                                        >
-                                          Use Recommended
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="rsvp-address-keep-btn"
-                                          onClick={useEnteredAddress}
-                                          disabled={addressVerifyLoading || submitting || loading}
-                                        >
-                                          Keep Entered Address
-                                        </button>
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
+                                {!addressSuggestion && addressVerifyStatus && (
+                                  <p className="rsvp-address-verify-status">{addressVerifyStatus}</p>
+                                )}
                               </div>
                             );
                           }

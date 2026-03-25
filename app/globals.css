@@ -485,57 +485,59 @@ a {
 }
 
 .rsvp-address-block {
-  gap: 0.5rem;
-}
-
-.rsvp-address-verify-wrap {
-  display: grid;
   gap: 0.45rem;
 }
 
-.rsvp-address-verify-btn,
-.rsvp-address-use-btn,
-.rsvp-address-keep-btn {
-  border: 1px solid rgba(220, 161, 161, 0.45);
-  border-radius: 999px;
-  background: rgba(65, 53, 51, 0.55);
-  color: #f8efea;
-  font-size: 0.74rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-weight: 700;
-  padding: 0.5rem 0.88rem;
-  justify-self: start;
-  cursor: pointer;
+.rsvp-address-label {
+  display: grid;
+  gap: 0.34rem;
 }
 
-.rsvp-address-verify-btn:disabled,
-.rsvp-address-use-btn:disabled,
-.rsvp-address-keep-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
+.rsvp-address-input-wrap {
+  position: relative;
 }
 
 .rsvp-address-verify-status {
   margin: 0;
-  font-size: 0.78rem;
-  color: rgba(244, 236, 232, 0.88);
+  font-size: 0.76rem;
+  color: rgba(244, 236, 232, 0.82);
 }
 
-.rsvp-address-suggestion {
-  border: 1px solid rgba(220, 161, 161, 0.34);
-  border-radius: 0.66rem;
-  background: rgba(218, 203, 191, 0.08);
-  padding: 0.58rem;
+.rsvp-address-review {
+  border: 1px solid rgba(220, 161, 161, 0.32);
+  border-radius: 0.62rem;
+  background: rgba(42, 30, 33, 0.72);
+  padding: 0.56rem;
   display: grid;
   gap: 0.45rem;
 }
 
-.rsvp-address-suggestion p {
+.rsvp-address-review-title {
   margin: 0;
   font-size: 0.78rem;
-  color: #f2e7e2;
-  line-height: 1.35;
+  color: #f2e5df;
+}
+
+.rsvp-address-review-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.42rem;
+}
+
+.rsvp-address-review-grid small {
+  display: block;
+  margin-bottom: 0.14rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(242, 226, 219, 0.68);
+}
+
+.rsvp-address-review-grid p {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.32;
+  color: rgba(248, 241, 236, 0.92);
 }
 
 .rsvp-address-actions {
@@ -544,19 +546,52 @@ a {
   gap: 0.45rem;
 }
 
+.rsvp-address-use-btn,
+.rsvp-address-keep-btn {
+  border-radius: 999px;
+  font-size: 0.71rem;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  padding: 0.44rem 0.76rem;
+  cursor: pointer;
+}
+
+.rsvp-address-use-btn {
+  border: 1px solid rgba(220, 161, 161, 0.48);
+  background: rgba(220, 161, 161, 0.2);
+  color: #fff3ef;
+}
+
+.rsvp-address-keep-btn {
+  border: 1px solid rgba(220, 161, 161, 0.24);
+  background: transparent;
+  color: rgba(248, 238, 233, 0.86);
+}
+
+.rsvp-address-use-btn:disabled,
+.rsvp-address-keep-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 .rsvp-address-predictions {
+  position: absolute;
+  top: calc(100% + 0.34rem);
+  left: 0;
+  right: 0;
+  z-index: 24;
   display: grid;
-  gap: 0.25rem;
+  gap: 0;
   border: 1px solid rgba(220, 161, 161, 0.34);
-  border-radius: 0.62rem;
-  background: rgba(30, 22, 24, 0.92);
-  max-height: 220px;
+  border-radius: 0.58rem;
+  background: rgba(22, 16, 18, 0.97);
+  max-height: 240px;
   overflow-y: auto;
+  box-shadow: 0 16px 30px rgba(11, 8, 9, 0.4);
 }
 
 .rsvp-address-prediction {
   border: 0;
-  border-radius: 0;
   text-align: left;
   padding: 0.58rem 0.66rem;
   color: #f5ece8;
@@ -564,15 +599,27 @@ a {
   cursor: pointer;
   display: grid;
   gap: 0.1rem;
+  width: 100%;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 500;
+  border-radius: 0;
+  box-shadow: none;
+  filter: none;
+  transition: background 160ms ease;
+}
+
+.rsvp-address-prediction + .rsvp-address-prediction {
+  border-top: 1px solid rgba(220, 161, 161, 0.14);
 }
 
 .rsvp-address-prediction small {
-  color: rgba(235, 219, 214, 0.76);
-  font-size: 0.73rem;
+  color: rgba(235, 219, 214, 0.68);
+  font-size: 0.71rem;
 }
 
 .rsvp-address-prediction:hover {
-  background: rgba(220, 161, 161, 0.16);
+  background: rgba(220, 161, 161, 0.14);
 }
 
 .rsvp-form-card button {
@@ -652,7 +699,6 @@ a {
 .rsvp-form-card button,
 .rsvp-success-reset,
 .rsvp-admin-link,
-.rsvp-address-verify-btn,
 .rsvp-address-use-btn,
 .rsvp-address-keep-btn {
   transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease, background 180ms ease;
@@ -662,7 +708,6 @@ a {
 .rsvp-success-reset:hover,
 .rsvp-success-edit:hover,
 .rsvp-admin-link:hover,
-.rsvp-address-verify-btn:hover,
 .rsvp-address-use-btn:hover,
 .rsvp-address-keep-btn:hover {
   transform: translateY(-1px);
@@ -674,7 +719,6 @@ a {
 .rsvp-success-reset:active,
 .rsvp-success-edit:active,
 .rsvp-admin-link:active,
-.rsvp-address-verify-btn:active,
 .rsvp-address-use-btn:active,
 .rsvp-address-keep-btn:active {
   transform: translateY(0);

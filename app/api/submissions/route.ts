@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
   appendSubmission,
+  checkDuplicateInGoogleSheets,
   findRecentDuplicateSubmission,
   forwardToIntegrations,
   loadSettings,
@@ -76,14 +77,17 @@ export async function POST(request: Request) {
   const existing = await loadSubmissions();
   const duplicate = findRecentDuplicateSubmission(values, existing);
   if (duplicate) {
-    return NextResponse.json(
-      {
-        error: "A recent submission with the same name and email already exists.",
-        duplicateId: duplicate.id,
-        duplicateSubmittedAt: duplicate.submittedAt,
-      },
-      { status: 409 },
-    );
+    const sheetCheck = await checkDuplicateInGoogleSheets(values, settings);
+    if (sheetCheck.checked && sheetCheck.duplicate) {
+      return NextResponse.json(
+        {
+          error: "A recent submission with the same name and email already exists in the spreadsheet.",
+          duplicateId: duplicate.id,
+          duplicateSubmittedAt: duplicate.submittedAt,
+        },
+        { status: 409 },
+      );
+    }
   }
 
   const submission: SubmissionRecord = {

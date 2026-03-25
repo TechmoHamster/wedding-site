@@ -379,6 +379,85 @@ export function findRecentDuplicateSubmission(
   return null;
 }
 
+
+export async function checkDuplicateInGoogleSheets(
+  values: Record<string, string>,
+  settings: Settings,
+): Promise<{ checked: boolean; duplicate: boolean; message: string }> {
+  const webhookUrl = (settings.integrations.googleSheetsWebhookUrl || "").trim();
+  if (!webhookUrl) {
+    return { checked: false, duplicate: false, message: "Google Sheets webhook is not configured." };
+  }
+
+  const lookup = {
+    firstName: (values.firstName || "").trim(),
+    lastName: (values.lastName || "").trim(),
+    email: (values.email || "").trim().toLowerCase(),
+  };
+
+  if (!lookup.firstName || !lookup.lastName || !lookup.email) {
+    return { checked: false, duplicate: false, message: "Missing duplicate check fields." };
+  }
+
+  try {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (settings.integrations.googleSheetsSecret) {
+      headers["x-webhook-secret"] = settings.integrations.googleSheetsSecret;
+    }
+
+    const response = await fetch(webhookUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        mode: "duplicate_check",
+        lookup,
+      }),
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return {
+        checked: false,
+        duplicate: false,
+        message: `Duplicate check endpoint failed (${response.status}).`,
+      };
+    }
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      duplicate?: unknown;
+      exists?: unknown;
+      mode?: unknown;
+    };
+
+    const duplicate =
+      typeof payload.duplicate === "boolean"
+        ? payload.duplicate
+        : typeof payload.exists === "boolean"
+          ? payload.exists
+          : null;
+
+    if (duplicate === null) {
+      return {
+        checked: false,
+        duplicate: false,
+        message: "Duplicate check response did not include duplicate/exists boolean.",
+      };
+    }
+
+    return {
+      checked: true,
+      duplicate,
+      message: duplicate ? "Duplicate found in spreadsheet." : "No duplicate found in spreadsheet.",
+    };
+  } catch (error) {
+    return {
+      checked: false,
+      duplicate: false,
+      message: error instanceof Error ? error.message : "Duplicate check request failed.",
+    };
+  }
+}
+
 function getRangeCutoff(range: string): number | null {
   const now = Date.now();
   switch (range) {
