@@ -576,50 +576,56 @@ a {
 
 .rsvp-address-predictions {
   position: absolute;
-  top: calc(100% + 0.34rem);
+  top: calc(100% + 0.3rem);
   left: 0;
   right: 0;
   z-index: 24;
   display: grid;
   gap: 0;
-  border: 1px solid rgba(220, 161, 161, 0.34);
-  border-radius: 0.58rem;
-  background: rgba(22, 16, 18, 0.97);
-  max-height: 240px;
+  border: 1px solid rgba(248, 239, 234, 0.2);
+  border-radius: 0.62rem;
+  background: rgba(20, 15, 17, 0.96);
+  max-height: 200px;
   overflow-y: auto;
-  box-shadow: 0 16px 30px rgba(11, 8, 9, 0.4);
+  box-shadow: 0 10px 22px rgba(10, 8, 9, 0.34);
 }
 
-.rsvp-address-prediction {
+.rsvp-address-predictions .rsvp-address-prediction {
   border: 0;
+  border-radius: 0;
   text-align: left;
-  padding: 0.58rem 0.66rem;
-  color: #f5ece8;
-  background: transparent;
+  padding: 0.54rem 0.62rem;
+  color: rgba(250, 243, 239, 0.95);
+  background: transparent !important;
   cursor: pointer;
   display: grid;
-  gap: 0.1rem;
+  gap: 0.08rem;
   width: 100%;
   text-transform: none;
   letter-spacing: normal;
   font-weight: 500;
-  border-radius: 0;
-  box-shadow: none;
+  box-shadow: none !important;
+  filter: none !important;
+  transition: background 140ms ease;
+}
+
+.rsvp-address-predictions .rsvp-address-prediction + .rsvp-address-prediction {
+  border-top: 1px solid rgba(248, 239, 234, 0.1);
+}
+
+.rsvp-address-predictions .rsvp-address-prediction small {
+  color: rgba(235, 219, 214, 0.62);
+  font-size: 0.69rem;
+}
+
+.rsvp-address-predictions .rsvp-address-prediction:hover {
+  transform: none;
+  background: rgba(248, 239, 234, 0.08) !important;
+}
+
+.rsvp-address-predictions .rsvp-address-prediction:active {
+  transform: none;
   filter: none;
-  transition: background 160ms ease;
-}
-
-.rsvp-address-prediction + .rsvp-address-prediction {
-  border-top: 1px solid rgba(220, 161, 161, 0.14);
-}
-
-.rsvp-address-prediction small {
-  color: rgba(235, 219, 214, 0.68);
-  font-size: 0.71rem;
-}
-
-.rsvp-address-prediction:hover {
-  background: rgba(220, 161, 161, 0.14);
 }
 
 .rsvp-form-card button {
