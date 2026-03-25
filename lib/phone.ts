@@ -82,12 +82,21 @@ export function normalizeNationalNumberInput(
   const digitsOnly = input.replace(/\D/g, "");
   if (!digitsOnly) return { country, nationalNumber: "" };
 
-  const parsedWithDialCode = parsePhoneNumberFromString(`+${digitsOnly}`);
-  if (parsedWithDialCode && parsedWithDialCode.country === country) {
-    return {
-      country,
-      nationalNumber: parsedWithDialCode.nationalNumber || digitsOnly,
-    };
+  let internationalCandidate = "";
+  if (input.startsWith("00") && digitsOnly.length > 2) {
+    internationalCandidate = `+${digitsOnly.slice(2)}`;
+  } else if (digitsOnly.length >= 11) {
+    internationalCandidate = `+${digitsOnly}`;
+  }
+
+  if (internationalCandidate) {
+    const parsedInternational = parsePhoneNumberFromString(internationalCandidate);
+    if (parsedInternational && parsedInternational.isValid() && parsedInternational.country) {
+      return {
+        country: parsedInternational.country as CountryCode,
+        nationalNumber: parsedInternational.nationalNumber || digitsOnly,
+      };
+    }
   }
 
   return { country, nationalNumber: digitsOnly };
