@@ -139,6 +139,7 @@ export default function RsvpPage() {
   const [csrfToken, setCsrfToken] = useState("");
   const [hasTrackedStart, setHasTrackedStart] = useState(false);
   const [lastSubmissionId, setLastSubmissionId] = useState("");
+  const [editingSubmissionId, setEditingSubmissionId] = useState("");
   const [lastSubmittedValues, setLastSubmittedValues] = useState<Record<string, string> | null>(null);
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileError, setTurnstileError] = useState("");
@@ -554,6 +555,7 @@ export default function RsvpPage() {
     setStatusMessage("");
     setStatusType("");
     setLastSubmissionId("");
+    setEditingSubmissionId("");
     setTurnstileToken("");
     setTurnstileError("");
     setAddressPredictions([]);
@@ -566,6 +568,7 @@ export default function RsvpPage() {
 
   const handleEditLastResponse = () => {
     if (!lastSubmittedValues || !config) return;
+    setEditingSubmissionId(lastSubmissionId || "");
     setValues(lastSubmittedValues);
     const phoneUi = parseStoredPhoneToUi(lastSubmittedValues.phone || "", DEFAULT_PHONE_COUNTRY);
     setPhoneCountry(phoneUi.country);
@@ -702,7 +705,12 @@ export default function RsvpPage() {
       const response = await fetch("/api/submissions", {
         method: "POST",
         headers,
-        body: JSON.stringify({ ...values, website: "", turnstileToken }),
+        body: JSON.stringify({
+          ...values,
+          website: "",
+          turnstileToken,
+          editSubmissionId: editingSubmissionId || "",
+        }),
       });
 
       const payload = await response.json().catch(() => ({}));
@@ -712,6 +720,9 @@ export default function RsvpPage() {
       }
 
       let message = payload.message || "Submission saved.";
+      if (payload && typeof payload === "object" && payload.updated === true) {
+        message = "Your RSVP update was saved.";
+      }
       if (Array.isArray(payload.integrationWarnings) && payload.integrationWarnings.length > 0) {
         message += ` Integration warnings: ${payload.integrationWarnings.join(" ")}`;
         setStatusType("error");
@@ -721,6 +732,7 @@ export default function RsvpPage() {
         setStatusType("success");
         setShowSuccessAnimation(true);
         setLastSubmissionId(typeof payload.submissionId === "string" ? payload.submissionId : "");
+        setEditingSubmissionId("");
         setLastSubmittedValues({ ...values });
         trackEvent("form_submit_success", {
           submissionId: typeof payload.submissionId === "string" ? payload.submissionId : "",

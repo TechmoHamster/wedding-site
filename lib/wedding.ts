@@ -41,7 +41,7 @@ export const DEFAULT_SETTINGS: Settings = {
     { id: "lastName", label: "Last Name", type: "text", required: true, width: "half", placeholder: "", autocomplete: "family-name", defaultValue: "" },
     { id: "email", label: "Email", type: "email", required: true, width: "full", placeholder: "", autocomplete: "email", defaultValue: "" },
     { id: "phone", label: "Phone Number", type: "tel", required: false, width: "full", placeholder: "", autocomplete: "tel", defaultValue: "" },
-    { id: "smsOptIn", label: "Can this number receive text messages?", type: "radio", required: false, width: "full", placeholder: "", autocomplete: "", defaultValue: "", options: ["Yes", "No"] },
+    { id: "smsOptIn", label: "Can this number receive text messages?", type: "radio", required: true, width: "full", placeholder: "", autocomplete: "", defaultValue: "", options: ["Yes", "No"] },
     { id: "street1", label: "Street Address", type: "text", required: true, width: "full", placeholder: "", autocomplete: "address-line1", defaultValue: "" },
     { id: "street2", label: "Apartment, Suite, etc. (optional)", type: "text", required: false, width: "full", placeholder: "", autocomplete: "address-line2", defaultValue: "" },
     { id: "city", label: "City", type: "text", required: true, width: "half", placeholder: "", autocomplete: "address-level2", defaultValue: "" },
@@ -273,6 +273,19 @@ export async function loadSubmissions(force = false): Promise<SubmissionRecord[]
 export async function appendSubmission(submission: SubmissionRecord): Promise<void> {
   const items = await loadSubmissions();
   items.push(submission);
+  submissionsCache = items;
+  await queueWrite(async () => writeJson(SUBMISSIONS_FILE, items));
+}
+
+export async function upsertSubmission(submission: SubmissionRecord): Promise<void> {
+  const items = await loadSubmissions();
+  const index = items.findIndex((item) => item.id === submission.id);
+  if (index >= 0) {
+    items[index] = submission;
+  } else {
+    items.push(submission);
+  }
+
   submissionsCache = items;
   await queueWrite(async () => writeJson(SUBMISSIONS_FILE, items));
 }
@@ -518,7 +531,9 @@ export function buildCsv(submissions: SubmissionRecord[], settings: Settings): s
 }
 
 export async function forwardToIntegrations(
-  submission: Pick<SubmissionRecord, "id" | "submittedAt" | "values">,
+  submission: Pick<SubmissionRecord, "id" | "submittedAt" | "values"> & {
+    mode?: "append_submission" | "upsert_submission";
+  },
   settings: Settings,
 ): Promise<SubmissionRecord["integrations"]> {
   const config = settings.integrations;
@@ -544,7 +559,12 @@ export async function forwardToIntegrations(
       const response = await fetch(config.googleSheetsWebhookUrl, {
         method: "POST",
         headers,
-        body: JSON.stringify({ submittedAt: submission.submittedAt, id: submission.id, values: submission.values }),
+        body: JSON.stringify({
+          mode: submission.mode || "append_submission",
+          submittedAt: submission.submittedAt,
+          id: submission.id,
+          values: submission.values,
+        }),
       });
 
       result.googleSheets.ok = response.ok;

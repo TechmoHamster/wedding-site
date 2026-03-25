@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
-  appendSubmission,
+  upsertSubmission,
   checkDuplicateInGoogleSheets,
   findRecentDuplicateSubmission,
   forwardToIntegrations,
@@ -71,6 +71,12 @@ export async function POST(request: Request) {
       ? (payload as { turnstileToken: string }).turnstileToken
       : "";
 
+  const editSubmissionId =
+    payload && typeof payload === "object" && typeof (payload as { editSubmissionId?: unknown }).editSubmissionId === "string"
+      ? (payload as { editSubmissionId: string }).editSubmissionId.trim().slice(0, 120)
+      : "";
+  const isEditMode = Boolean(editSubmissionId);
+
   const captcha = await verifyTurnstileToken(turnstileToken, ip);
   if (!captcha.ok) {
     return NextResponse.json({ error: captcha.reason }, { status: 400 });
@@ -89,23 +95,25 @@ export async function POST(request: Request) {
     console.error("[submissions] local submissions cache unavailable:", toErrorMessage(error));
   }
 
-  const duplicate = findRecentDuplicateSubmission(values, existing);
-  if (duplicate) {
-    const sheetCheck = await checkDuplicateInGoogleSheets(values, settings);
-    if (sheetCheck.checked && sheetCheck.duplicate) {
-      return NextResponse.json(
-        {
-          error: "A recent submission with the same name and email already exists in the spreadsheet.",
-          duplicateId: duplicate.id,
-          duplicateSubmittedAt: duplicate.submittedAt,
-        },
-        { status: 409 },
-      );
+  if (!isEditMode) {
+    const duplicate = findRecentDuplicateSubmission(values, existing);
+    if (duplicate) {
+      const sheetCheck = await checkDuplicateInGoogleSheets(values, settings);
+      if (sheetCheck.checked && sheetCheck.duplicate) {
+        return NextResponse.json(
+          {
+            error: "A recent submission with the same name and email already exists in the spreadsheet.",
+            duplicateId: duplicate.id,
+            duplicateSubmittedAt: duplicate.submittedAt,
+          },
+          { status: 409 },
+        );
+      }
     }
   }
 
   const submission: SubmissionRecord = {
-    id: randomUUID(),
+    id: editSubmissionId || randomUUID(),
     submittedAt: new Date().toISOString(),
     values,
     meta: {
@@ -119,7 +127,10 @@ export async function POST(request: Request) {
     warnings: [],
   };
 
-  submission.integrations = await forwardToIntegrations(submission, settings);
+  submission.integrations = await forwardToIntegrations(
+    { ...submission, mode: isEditMode ? "upsert_submission" : "append_submission" },
+    settings,
+  );
   if (submission.integrations.googleSheets.enabled && submission.integrations.googleSheets.ok === false) {
     submission.warnings.push(`Google Sheets: ${submission.integrations.googleSheets.message}`);
   }
@@ -138,10 +149,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    await appendSubmission(submission);
+    await upsertSubmission(submission);
   } catch (error) {
     const message = toErrorMessage(error);
-    console.error("[submissions] append submission failed:", message);
+    console.error("[submissions] upsert submission failed:", message);
   }
 
   return NextResponse.json(
@@ -150,6 +161,7 @@ export async function POST(request: Request) {
       submissionId: submission.id,
       message: settings.branding.successMessage,
       integrationWarnings: submission.warnings,
+      updated: isEditMode,
     },
     {
       status: 201,

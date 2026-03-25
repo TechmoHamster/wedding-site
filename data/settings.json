@@ -51,7 +51,7 @@
       "id": "smsOptIn",
       "label": "Can this number receive text messages?",
       "type": "radio",
-      "required": false,
+      "required": true,
       "width": "full",
       "placeholder": "",
       "autocomplete": "",
