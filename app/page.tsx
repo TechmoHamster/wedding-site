@@ -895,6 +895,7 @@ export default function RsvpPage() {
                           if (field.id === "phone") {
                             return (
                               <div key={field.id} className={`${fieldClass} rsvp-phone-field`.trim()}>
+                                <span>{field.label}</span>
                                 <div className="rsvp-phone-grid">
                                   <label className="rsvp-phone-code">
                                     Country Code
