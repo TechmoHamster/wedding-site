@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { filterSubmissionsByRange, loadSubmissions, requireAdmin } from "@/lib/wedding";
+import { clearSubmissions, filterSubmissionsByRange, loadSubmissions, requireAdmin } from "@/lib/wedding";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +22,23 @@ export async function GET(request: Request) {
       range,
       count: filtered.length,
       items: filtered,
+    },
+    { headers: { "Cache-Control": "no-store" } },
+  );
+}
+
+export async function DELETE(request: Request) {
+  if (!requireAdmin(request.headers)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  await clearSubmissions();
+
+  return NextResponse.json(
+    {
+      ok: true,
+      count: 0,
+      message: "Submission log cleared.",
     },
     { headers: { "Cache-Control": "no-store" } },
   );

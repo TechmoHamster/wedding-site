@@ -408,6 +408,29 @@ export default function AdminPage() {
     }
   };
 
+  const clearSubmissionLog = async () => {
+    const confirmed = window.confirm("Clear all saved submission log entries? This cannot be undone.");
+    if (!confirmed) return;
+
+    setSubmissionStatus({ type: "", message: "" });
+    try {
+      const response = await apiRequest("/api/admin/submissions", { method: "DELETE" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to clear submission log.");
+      }
+
+      setSubmissions([]);
+      setSubmissionsCount(0);
+      setSubmissionStatus({ type: "success", message: payload.message || "Submission log cleared." });
+    } catch (error) {
+      setSubmissionStatus({
+        type: "error",
+        message: error instanceof Error ? error.message : "Failed to clear submission log.",
+      });
+    }
+  };
+
   const headers = useMemo(() => {
     return ["Submitted At", ...fields.map((field) => field.label), "Warnings"];
   }, [fields]);
@@ -673,6 +696,7 @@ export default function AdminPage() {
                 Refresh
               </button>
               <button type="button" onClick={exportCsv}>Export CSV</button>
+              <button type="button" onClick={clearSubmissionLog}>Clear Submission Log</button>
             </div>
 
             <p className="admin-hint">Showing {submissionsCount} submission(s) for range: {range}</p>

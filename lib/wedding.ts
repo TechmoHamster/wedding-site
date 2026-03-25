@@ -277,6 +277,12 @@ export async function appendSubmission(submission: SubmissionRecord): Promise<vo
   await queueWrite(async () => writeJson(SUBMISSIONS_FILE, items));
 }
 
+export async function clearSubmissions(): Promise<void> {
+  await ensureDataFiles();
+  submissionsCache = [];
+  await queueWrite(async () => writeJson(SUBMISSIONS_FILE, []));
+}
+
 export function isVisibleField(field: FormField, values: Record<string, string>): boolean {
   if (!field.showWhen || !field.showWhen.fieldId || !Array.isArray(field.showWhen.values)) {
     return true;
