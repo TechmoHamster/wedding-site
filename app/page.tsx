@@ -581,6 +581,10 @@ export default function RsvpPage() {
     setAddressPredictions([]);
     setShowAddressPredictions(false);
     setAllowUnverifiedAddress(false);
+    setTurnstileToken("");
+    setTurnstileError("");
+    const t = (window as Window & { turnstile?: { reset: () => void } }).turnstile;
+    if (t && typeof t.reset === "function") t.reset();
   };
 
   const verifyAddress = async (): Promise<Partial<AddressVerifyResponse> | null> => {
