@@ -895,7 +895,6 @@ export default function RsvpPage() {
                           if (field.id === "phone") {
                             return (
                               <div key={field.id} className={`${fieldClass} rsvp-phone-field`.trim()}>
-                                <span>{field.label}</span>
                                 <div className="rsvp-phone-grid">
                                   <label className="rsvp-phone-code">
                                     Country Code
@@ -912,13 +911,13 @@ export default function RsvpPage() {
                                     </select>
                                   </label>
                                   <label className="rsvp-phone-number">
+                                    {field.label}
                                     <input
                                       type="tel"
                                       name="phoneNational"
                                       value={formatNationalNumberDisplay(phoneCountry, phoneNationalNumber)}
                                       onChange={(e) => handlePhoneNationalChange(e.target.value)}
                                       onBlur={() => markTouched(field.id)}
-                                      placeholder="Phone number"
                                       autoComplete={field.autocomplete || "tel-national"}
                                       aria-invalid={error ? "true" : "false"}
                                       aria-describedby={describedBy}
