@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import Script from "next/script";
 import type { FormConfig, FormField } from "@/lib/types";
 import { COUNTRY_OPTIONS, getCountryCode, getStateOptionsForCountry, normalizeCountryName } from "@/lib/addressOptions";
@@ -152,6 +152,7 @@ export default function RsvpPage() {
   const [showAddressPredictions, setShowAddressPredictions] = useState(false);
   const [phoneCountry, setPhoneCountry] = useState<CountryCode>(DEFAULT_PHONE_COUNTRY);
   const [phoneNationalNumber, setPhoneNationalNumber] = useState("");
+  const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
 
   const captchaRequired = Boolean(TURNSTILE_SITE_KEY);
   const isTurnstileVerified = !captchaRequired || Boolean(turnstileToken);
@@ -265,30 +266,52 @@ export default function RsvpPage() {
 
 
   useEffect(() => {
-    if (!TURNSTILE_SITE_KEY) return;
+    if (!TURNSTILE_SITE_KEY || showSuccessAnimation) return;
 
-    const handleSuccess = (token: string) => {
-      setTurnstileToken(token || "");
-      setTurnstileError("");
+    const renderWidget = () => {
+      const api = (window as Window & {
+        turnstile?: {
+          render: (container: HTMLElement, options: Record<string, unknown>) => unknown;
+        };
+      }).turnstile;
+
+      const container = turnstileContainerRef.current;
+      if (!api || !container) return false;
+      if (container.querySelector("iframe")) return true;
+
+      container.innerHTML = "";
+      api.render(container, {
+        sitekey: TURNSTILE_SITE_KEY,
+        theme: "light",
+        size: "flexible",
+        callback: (token: string) => {
+          setTurnstileToken(token || "");
+          setTurnstileError("");
+        },
+        "expired-callback": () => {
+          setTurnstileToken("");
+        },
+        "error-callback": () => {
+          setTurnstileToken("");
+          setTurnstileError("CAPTCHA failed. Please try again.");
+        },
+      });
+
+      return true;
     };
 
-    const handleExpire = () => {
-      setTurnstileToken("");
-    };
+    if (renderWidget()) return;
 
-    const w = window as Window & {
-      __weddingTurnstileDone?: (token: string) => void;
-      __weddingTurnstileExpired?: () => void;
-    };
-
-    w.__weddingTurnstileDone = handleSuccess;
-    w.__weddingTurnstileExpired = handleExpire;
+    const intervalId = window.setInterval(() => {
+      if (renderWidget()) {
+        window.clearInterval(intervalId);
+      }
+    }, 250);
 
     return () => {
-      delete w.__weddingTurnstileDone;
-      delete w.__weddingTurnstileExpired;
+      window.clearInterval(intervalId);
     };
-  }, []);
+  }, [TURNSTILE_SITE_KEY, showSuccessAnimation]);
 
   const branding = useMemo(
     () => ({ ...FALLBACK_BRANDING, ...(config?.branding || {}) }),
@@ -1095,14 +1118,7 @@ export default function RsvpPage() {
 
                     {captchaRequired && (
                       <div className="rsvp-captcha-block">
-                        <div
-                          className="cf-turnstile"
-                          data-sitekey={TURNSTILE_SITE_KEY}
-                          data-theme="light"
-                          data-callback="__weddingTurnstileDone"
-                          data-expired-callback="__weddingTurnstileExpired"
-                          data-size="flexible"
-                        />
+                        <div ref={turnstileContainerRef} className="cf-turnstile" />
                         {!turnstileToken && !turnstileError && (
                           <p className="rsvp-field-hint">Please verify you are human to enable submit.</p>
                         )}
