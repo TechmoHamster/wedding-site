@@ -134,7 +134,6 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     const message = toErrorMessage(error);
-    submission.warnings.push("Retry queue storage unavailable; failed integration retries may not be saved.");
     console.error("[submissions] enqueue retry failed:", message);
   }
 
@@ -142,7 +141,6 @@ export async function POST(request: Request) {
     await appendSubmission(submission);
   } catch (error) {
     const message = toErrorMessage(error);
-    submission.warnings.push("Submission archive unavailable; response was forwarded to integrations.");
     console.error("[submissions] append submission failed:", message);
   }
 
