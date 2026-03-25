@@ -390,11 +390,19 @@ export default function RsvpPage() {
     let cancelled = false;
     const timeout = window.setTimeout(async () => {
       try {
-        const countryCode = getCountryCode(selectedCountry);
-        const request: any = { input };
-        if (countryCode) request.includedRegionCodes = [countryCode.toLowerCase()];
+        const countryCode = getCountryCode(selectedCountry).toUpperCase();
+        const baseRequest: any = { input };
 
-        const result = await maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+        let result: any;
+        try {
+          const scopedRequest = countryCode
+            ? { ...baseRequest, includedRegionCodes: [countryCode] }
+            : baseRequest;
+          result = await maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions(scopedRequest);
+        } catch {
+          result = await maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions(baseRequest);
+        }
+
         if (cancelled) return;
 
         const suggestions = Array.isArray(result?.suggestions) ? result.suggestions : [];
