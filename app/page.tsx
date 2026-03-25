@@ -48,7 +48,7 @@ const FALLBACK_BRANDING = {
   eyebrow: "",
   title: "Share Your Address and RSVP",
   description:
-    "Please share your mailing address and RSVP by September 12, 2026 so we can send your invitation and finalize headcount.",
+    "Please share your mailing address and RSVP by August 31, 2026 so we can send your invitation and finalize headcount.",
   submitLabel: "Submit RSVP",
 };
 const SITE_TITLE = "Zach & Erika's Wedding";
