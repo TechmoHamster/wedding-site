@@ -23,15 +23,20 @@ export async function POST(request: Request) {
     ? (rawMeta as Record<string, unknown>)
     : {};
 
-  await recordTelemetry({
-    timestamp: new Date().toISOString(),
-    event,
-    payload: metaPayload,
-    meta: {
-      ip: getClientIp(request.headers),
-      userAgent: request.headers.get("user-agent") || "",
-    },
-  });
+  try {
+    await recordTelemetry({
+      timestamp: new Date().toISOString(),
+      event,
+      payload: metaPayload,
+      meta: {
+        ip: getClientIp(request.headers),
+        userAgent: request.headers.get("user-agent") || "",
+      },
+    });
+  } catch (error) {
+    // Telemetry must never block user requests in serverless environments.
+    console.error("[telemetry] write failed:", error instanceof Error ? error.message : "Unknown error");
+  }
 
   return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }

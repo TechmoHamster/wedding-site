@@ -20,6 +20,10 @@ export const dynamic = "force-dynamic";
 const RATE_LIMIT_PER_WINDOW = 20;
 const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 
+function toErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown error";
+}
+
 export async function POST(request: Request) {
   const ip = getClientIp(request.headers);
 
@@ -44,7 +48,11 @@ export async function POST(request: Request) {
   }
 
   const settings = await loadSettings();
-  await processIntegrationRetryQueue(settings, 2);
+  try {
+    await processIntegrationRetryQueue(settings, 2);
+  } catch (error) {
+    console.error("[submissions] retry queue processing failed:", toErrorMessage(error));
+  }
 
   let payload: unknown;
   try {
@@ -74,7 +82,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
   }
 
-  const existing = await loadSubmissions();
+  let existing: SubmissionRecord[] = [];
+  try {
+    existing = await loadSubmissions();
+  } catch (error) {
+    console.error("[submissions] local submissions cache unavailable:", toErrorMessage(error));
+  }
+
   const duplicate = findRecentDuplicateSubmission(values, existing);
   if (duplicate) {
     const sheetCheck = await checkDuplicateInGoogleSheets(values, settings);
@@ -113,12 +127,24 @@ export async function POST(request: Request) {
     submission.warnings.push(`Google Form: ${submission.integrations.googleForm.message}`);
   }
 
-  await enqueueFailedIntegrations(
-    { id: submission.id, submittedAt: submission.submittedAt, values: submission.values },
-    submission.integrations,
-  );
+  try {
+    await enqueueFailedIntegrations(
+      { id: submission.id, submittedAt: submission.submittedAt, values: submission.values },
+      submission.integrations,
+    );
+  } catch (error) {
+    const message = toErrorMessage(error);
+    submission.warnings.push("Retry queue storage unavailable; failed integration retries may not be saved.");
+    console.error("[submissions] enqueue retry failed:", message);
+  }
 
-  await appendSubmission(submission);
+  try {
+    await appendSubmission(submission);
+  } catch (error) {
+    const message = toErrorMessage(error);
+    submission.warnings.push("Submission archive unavailable; response was forwarded to integrations.");
+    console.error("[submissions] append submission failed:", message);
+  }
 
   return NextResponse.json(
     {
