@@ -38,6 +38,7 @@ type AddressPrediction = {
   description: string;
   mainText: string;
   secondaryText: string;
+  placePrediction?: any;
 };
 
 const EMPTY_OPTION_VALUE = "";
@@ -287,16 +288,25 @@ export default function RsvpPage() {
     [config],
   );
 
-  const parseAddressComponents = (components: Array<{ long_name?: string; short_name?: string; types?: string[] }> = []) => {
-    const find = (type: string, key: "long_name" | "short_name" = "long_name") =>
-      components.find((c) => Array.isArray(c.types) && c.types.includes(type))?.[key] || "";
+  const parseAddressComponents = (
+    components: Array<{ long_name?: string; short_name?: string; longText?: string; shortText?: string; types?: string[] }> = [],
+  ) => {
+    const find = (type: string, key: "long" | "short" = "long") => {
+      const component = components.find((c) => Array.isArray(c.types) && c.types.includes(type));
+      if (!component) return "";
+
+      if (key === "short") {
+        return component.shortText || component.short_name || "";
+      }
+      return component.longText || component.long_name || "";
+    };
 
     const streetNumber = find("street_number");
     const route = find("route");
     const locality = find("locality") || find("postal_town") || find("sublocality") || find("administrative_area_level_2");
-    const adminLevel1 = find("administrative_area_level_1", "long_name");
+    const adminLevel1 = find("administrative_area_level_1", "long");
     const postalCode = find("postal_code");
-    const countryLong = find("country", "long_name");
+    const countryLong = find("country", "long");
 
     return {
       street1: [streetNumber, route].filter(Boolean).join(" ").trim(),
@@ -307,9 +317,49 @@ export default function RsvpPage() {
     };
   };
 
-  const selectPrediction = (placeId: string) => {
+  const applyAddressParts = (parts: { street1: string; city: string; state: string; postalCode: string; country: string }) => {
+    setValues((prev) => {
+      const next = { ...prev };
+      next.street1 = parts.street1 || next.street1 || "";
+      next.city = parts.city || next.city || "";
+      next.country = normalizeCountryName(parts.country || next.country || "United States");
+      const options = getStateOptionsForCountry(next.country);
+      next.state = parts.state || next.state || "";
+      if (options.length > 0 && !options.includes(next.state)) {
+        next.state = EMPTY_OPTION_VALUE;
+      }
+      next.postalCode = parts.postalCode || next.postalCode || "";
+
+      if (config) {
+        setFieldErrors(computeErrors(config.fields, next, touched));
+      }
+
+      return next;
+    });
+
+    setShowAddressPredictions(false);
+    setAddressPredictions([]);
+    setAddressVerifyStatus("");
+    setAddressSuggestion(null);
+    setAllowUnverifiedAddress(false);
+  };
+
+  const selectPrediction = async (placeId: string) => {
     const maps = (window as Window & { google?: any }).google?.maps;
     if (!maps?.places) return;
+
+    const selected = addressPredictions.find((item) => item.placeId === placeId);
+    if (selected?.placePrediction?.toPlace) {
+      try {
+        const place = selected.placePrediction.toPlace();
+        await place.fetchFields({ fields: ["addressComponents"] });
+        const parts = parseAddressComponents(((place as any).addressComponents || []) as any[]);
+        applyAddressParts(parts);
+        return;
+      } catch {
+        // fallback below
+      }
+    }
 
     const service = new maps.places.PlacesService(document.createElement("div"));
     service.getDetails(
@@ -320,31 +370,7 @@ export default function RsvpPage() {
       (place: any, status: any) => {
         if (status !== maps.places.PlacesServiceStatus.OK || !place?.address_components) return;
         const parts = parseAddressComponents(place.address_components);
-
-        setValues((prev) => {
-          const next = { ...prev };
-          next.street1 = parts.street1 || next.street1 || "";
-          next.city = parts.city || next.city || "";
-          next.country = normalizeCountryName(parts.country || next.country || "United States");
-          const options = getStateOptionsForCountry(next.country);
-          next.state = parts.state || next.state || "";
-          if (options.length > 0 && !options.includes(next.state)) {
-            next.state = EMPTY_OPTION_VALUE;
-          }
-          next.postalCode = parts.postalCode || next.postalCode || "";
-
-          if (config) {
-            setFieldErrors(computeErrors(config.fields, next, touched));
-          }
-
-          return next;
-        });
-
-        setShowAddressPredictions(false);
-        setAddressPredictions([]);
-        setAddressVerifyStatus("");
-        setAddressSuggestion(null);
-        setAllowUnverifiedAddress(false);
+        applyAddressParts(parts);
       },
     );
   };
@@ -353,7 +379,7 @@ export default function RsvpPage() {
     if (!GOOGLE_MAPS_API_KEY || !googlePlacesReady) return;
 
     const maps = (window as Window & { google?: any }).google?.maps;
-    if (!maps?.places?.AutocompleteService) return;
+    if (!maps?.places?.AutocompleteSuggestion) return;
 
     const input = (values.street1 || "").trim();
     if (input.length < 3) {
@@ -361,35 +387,43 @@ export default function RsvpPage() {
       return;
     }
 
-    const timeout = window.setTimeout(() => {
-      const service = new maps.places.AutocompleteService();
-      const countryCode = getCountryCode(selectedCountry);
-      service.getPlacePredictions(
-        {
-          input,
-          types: ["address"],
-          componentRestrictions: countryCode ? { country: countryCode } : undefined,
-        },
-        (predictions: any[] | null, status: any) => {
-          if (status !== maps.places.PlacesServiceStatus.OK || !predictions?.length) {
-            setAddressPredictions([]);
-            return;
-          }
+    let cancelled = false;
+    const timeout = window.setTimeout(async () => {
+      try {
+        const countryCode = getCountryCode(selectedCountry);
+        const request: any = { input };
+        if (countryCode) request.includedRegionCodes = [countryCode.toLowerCase()];
 
-          const nextPredictions: AddressPrediction[] = predictions.slice(0, 5).map((prediction) => ({
-            placeId: String(prediction.place_id || ""),
-            description: String(prediction.description || ""),
-            mainText: String(prediction.structured_formatting?.main_text || prediction.description || ""),
-            secondaryText: String(prediction.structured_formatting?.secondary_text || ""),
-          })).filter((item) => item.placeId);
+        const result = await maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+        if (cancelled) return;
 
-          setAddressPredictions(nextPredictions);
-        },
-      );
+        const suggestions = Array.isArray(result?.suggestions) ? result.suggestions : [];
+        const nextPredictions: AddressPrediction[] = suggestions
+          .slice(0, 5)
+          .map((suggestion: any) => {
+            const prediction = suggestion?.placePrediction;
+            const text = String(prediction?.text?.text || "");
+            return {
+              placeId: String(prediction?.placeId || suggestion?.placeId || ""),
+              description: text,
+              mainText: String(prediction?.mainText?.text || text),
+              secondaryText: String(prediction?.secondaryText?.text || ""),
+              placePrediction: prediction,
+            };
+          })
+          .filter((item: AddressPrediction) => item.placeId);
+
+        setAddressPredictions(nextPredictions);
+      } catch {
+        if (!cancelled) setAddressPredictions([]);
+      }
     }, 170);
 
-    return () => window.clearTimeout(timeout);
-  }, [values.street1, selectedCountry, googlePlacesReady]);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+    };
+  }, [values.street1, selectedCountry, googlePlacesReady, GOOGLE_MAPS_API_KEY]);
 
   const updateFieldValue = (fieldId: string, nextValue: string) => {
     if (!hasTrackedStart) {
@@ -708,7 +742,7 @@ export default function RsvpPage() {
       )}
       {GOOGLE_MAPS_API_KEY && (
         <Script
-          src={`https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places`}
+          src={`https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&loading=async`}
           strategy="afterInteractive"
           onLoad={() => setGooglePlacesReady(true)}
         />
