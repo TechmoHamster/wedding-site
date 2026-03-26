@@ -161,13 +161,17 @@
     },
     {
       "id": "physicalInvite",
-      "label": "I would like a physical invite",
-      "type": "checkbox",
+      "label": "Would you like a physical invite?",
+      "type": "radio",
       "required": false,
       "width": "full",
       "placeholder": "",
       "autocomplete": "",
-      "defaultValue": "No"
+      "defaultValue": "No",
+      "options": [
+        "Yes",
+        "No"
+      ]
     },
     {
       "id": "message",
