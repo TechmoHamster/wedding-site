@@ -926,6 +926,7 @@ export default function RsvpPage() {
                                   aria-describedby={describedBy}
                                   disabled={!visible || submitting || loading}
                                 />
+                                <span>{field.label || "Option"}</span>
                                 {error && <p id={`${field.id}-error`} className="rsvp-field-error" aria-live="polite">{error}</p>}
                               </label>
                             );
