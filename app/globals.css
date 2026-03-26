@@ -252,6 +252,14 @@ a {
   color: #dacbbf;
 }
 
+.save-date-hero-copy {
+  border-radius: 1rem;
+  border: 1px solid rgba(244, 236, 232, 0.2);
+  background: linear-gradient(180deg, rgba(25, 18, 20, 0.4), rgba(25, 18, 20, 0.18));
+  backdrop-filter: blur(2px);
+  padding: clamp(0.8rem, 2vw, 1.25rem);
+}
+
 .save-date-details {
   margin-top: 1rem;
   display: grid;
@@ -263,12 +271,6 @@ a {
 
 .save-date-details p {
   margin: 0;
-}
-
-.save-date-note {
-  margin-top: 0.35rem !important;
-  color: #dacbbf;
-  font-size: 0.92rem;
 }
 
 .rsvp-form-card {

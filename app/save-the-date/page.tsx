@@ -158,8 +158,8 @@ export default function SaveTheDatePage() {
     if (!values.state.trim()) errors.push("State / Province is required.");
     if (!values.postalCode.trim()) errors.push("ZIP / Postal Code is required.");
     if (!values.country.trim()) errors.push("Country is required.");
-    if (!values.likelyAttend.trim()) errors.push("Likely Able to Attend? is required.");
-    if (!values.physicalInvite.trim()) errors.push("Would you like a physical invite? is required.");
+    if (!values.likelyAttend.trim()) errors.push("Are You Likely to Attend? is required.");
+    if (!values.physicalInvite.trim()) errors.push("Would You Like a Mailed Invitation? is required.");
 
     return errors;
   };
@@ -233,7 +233,7 @@ export default function SaveTheDatePage() {
       setStatusType("success");
       setShowSuccess(true);
       setStatusMessage(
-        "Thanks! We received your details. Formal invitations and more wedding updates will be shared closer to the date.",
+        "Thanks - your mailing info has been received. We'll send your formal invitation closer to the wedding.",
       );
       resetForm();
     } catch (error) {
@@ -262,18 +262,16 @@ export default function SaveTheDatePage() {
           </header>
 
           <div className="rsvp-stage-grid">
-            <section className="rsvp-hero-copy">
+            <section className="rsvp-hero-copy save-date-hero-copy">
               <h1 className="rsvp-title">Please Save the Date</h1>
               <p className="rsvp-description">
-                Zach and Erika are getting married. Please save the date and share your mailing information so we can
-                send your formal invitation later.
+                Zach and Erika are getting married. Please save the date and share your mailing address so we can send your formal invitation closer to the wedding.
               </p>
               <div className="save-date-details">
                 <p><strong>Zach & Erika&apos;s Wedding</strong></p>
                 <p>Monday, October 5, 2026</p>
                 <p>The Bungalow</p>
                 <p>235 S 100 W St, Pleasant Grove, UT 84062</p>
-                <p className="save-date-note">Formal invitations will be sent closer to the wedding.</p>
               </div>
             </section>
 
@@ -359,7 +357,7 @@ export default function SaveTheDatePage() {
                         </label>
 
                         <fieldset className="rsvp-radio-field full">
-                          <legend>Likely Able to Attend?</legend>
+                          <legend>Are You Likely to Attend?</legend>
                           <div className="rsvp-choice-row">
                             {["Yes", "No", "Maybe"].map((option) => (
                               <label className="rsvp-choice" key={`likely-${option}`}>
@@ -377,7 +375,7 @@ export default function SaveTheDatePage() {
                         </fieldset>
 
                         <fieldset className="rsvp-radio-field full">
-                          <legend>Would you like a physical invitation mailed to you?</legend>
+                          <legend>Would You Like a Mailed Invitation?</legend>
                           <div className="rsvp-choice-row">
                             {["Yes", "No"].map((option) => (
                               <label className="rsvp-choice" key={`physical-${option}`}>
