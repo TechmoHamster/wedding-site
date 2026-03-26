@@ -252,6 +252,25 @@ a {
   color: #dacbbf;
 }
 
+.save-date-details {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.24rem;
+  color: #f1e4dd;
+  font-size: 0.98rem;
+  line-height: 1.35;
+}
+
+.save-date-details p {
+  margin: 0;
+}
+
+.save-date-note {
+  margin-top: 0.35rem !important;
+  color: #dacbbf;
+  font-size: 0.92rem;
+}
+
 .rsvp-form-card {
   background: linear-gradient(160deg, rgba(65, 53, 51, 0.8), rgba(128, 0, 32, 0.38));
   border: 1px solid rgba(220, 161, 161, 0.32);
