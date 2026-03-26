@@ -161,7 +161,7 @@
     },
     {
       "id": "physicalInvite",
-      "label": "Would you like a physical invite? (optional)",
+      "label": "I would like a physical invite",
       "type": "checkbox",
       "required": false,
       "width": "full",
