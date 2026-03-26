@@ -61,17 +61,6 @@ export const DEFAULT_SETTINGS: Settings = {
       options: ["1", "2", "3", "4", "5+"],
       showWhen: { fieldId: "rsvp", values: ["Yes"] },
     },
-    {
-      id: "dietaryNotes",
-      label: "Dietary Notes (optional)",
-      type: "textarea",
-      required: false,
-      width: "full",
-      placeholder: "",
-      autocomplete: "",
-      defaultValue: "",
-      showWhen: { fieldId: "rsvp", values: ["Yes"] },
-    },
     { id: "message", label: "Message for the Couple (optional)", type: "textarea", required: false, width: "full", placeholder: "", autocomplete: "", defaultValue: "" },
   ],
   integrations: {
