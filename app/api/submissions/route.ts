@@ -24,6 +24,15 @@ function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
 
+function normalizeYesNo(value: unknown): string {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "yes" ? "Yes" : "No";
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 export async function POST(request: Request) {
   const ip = getClientIp(request.headers);
 
@@ -89,6 +98,27 @@ export async function POST(request: Request) {
   }
 
   const values = normalizeSubmission(payload, settings);
+
+  // Save-the-date has additional fields not stored in the legacy dynamic config.
+  if (normalizedFormKey === "save_the_date" && payload && typeof payload === "object") {
+    const source = payload as Record<string, unknown>;
+    values.physicalInvite = normalizeYesNo(source.physicalInvite);
+
+    // Ensure save-the-date required values are retained from payload even if
+    // dynamic settings do not include those field IDs.
+    values.phone = asString(source.phone) || values.phone || "";
+    values.firstName = asString(source.firstName) || values.firstName || "";
+    values.lastName = asString(source.lastName) || values.lastName || "";
+    values.email = asString(source.email) || values.email || "";
+    values.street1 = asString(source.street1) || values.street1 || "";
+    values.street2 = asString(source.street2) || values.street2 || "";
+    values.city = asString(source.city) || values.city || "";
+    values.state = asString(source.state) || values.state || "";
+    values.postalCode = asString(source.postalCode) || values.postalCode || "";
+    values.country = asString(source.country) || values.country || "";
+    values.rsvp = asString(source.rsvp) || values.rsvp || "";
+  }
+
   const errors = validateSubmission(values, settings);
   if (errors.length > 0) {
     return NextResponse.json({ error: "Validation failed", details: errors }, { status: 400 });
