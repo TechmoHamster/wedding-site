@@ -107,7 +107,7 @@ function validateField(field: keyof SaveDateValues, values: SaveDateValues): str
   if (field === "street2") return "";
 
   if (field === "phone") {
-    if (!value) return "";
+    if (!value) return "Phone Number is required.";
     return isValidInternationalPhone(value) ? "" : "Phone Number must be valid.";
   }
 
@@ -836,6 +836,7 @@ export default function SaveTheDatePage() {
                             onBlur={() => markTouched("firstName")}
                             aria-invalid={fieldErrors.firstName ? "true" : "false"}
                             autoComplete="given-name"
+                            required
                           />
                           {fieldErrors.firstName && <p className="rsvp-field-error">{fieldErrors.firstName}</p>}
                         </label>
@@ -848,6 +849,7 @@ export default function SaveTheDatePage() {
                             onBlur={() => markTouched("lastName")}
                             aria-invalid={fieldErrors.lastName ? "true" : "false"}
                             autoComplete="family-name"
+                            required
                           />
                           {fieldErrors.lastName && <p className="rsvp-field-error">{fieldErrors.lastName}</p>}
                         </label>
@@ -861,6 +863,7 @@ export default function SaveTheDatePage() {
                             onBlur={() => markTouched("email")}
                             aria-invalid={fieldErrors.email ? "true" : "false"}
                             autoComplete="email"
+                            required
                           />
                           {fieldErrors.email && <p className="rsvp-field-error">{fieldErrors.email}</p>}
                         </label>
@@ -892,7 +895,7 @@ export default function SaveTheDatePage() {
                               </select>
                             </label>
                             <label className="rsvp-phone-number">
-                              Phone Number (optional)
+                              Phone Number
                               <input
                                 type="tel"
                                 name="phoneNational"
@@ -901,6 +904,7 @@ export default function SaveTheDatePage() {
                                 onBlur={() => markTouched("phone")}
                                 aria-invalid={fieldErrors.phone ? "true" : "false"}
                                 autoComplete="tel-national"
+                                required
                                 disabled={submitting}
                               />
                             </label>
@@ -925,6 +929,7 @@ export default function SaveTheDatePage() {
                                 }}
                                 aria-invalid={fieldErrors.street1 ? "true" : "false"}
                                 autoComplete="address-line1"
+                                required
                               />
 
                               {showAddressPredictions && addressPredictions.length > 0 && (
@@ -1004,6 +1009,7 @@ export default function SaveTheDatePage() {
                             onBlur={() => markTouched("city")}
                             aria-invalid={fieldErrors.city ? "true" : "false"}
                             autoComplete="address-level2"
+                            required
                           />
                           {fieldErrors.city && <p className="rsvp-field-error">{fieldErrors.city}</p>}
                         </label>
@@ -1015,6 +1021,7 @@ export default function SaveTheDatePage() {
                             onChange={(e) => updateValue("state", e.target.value)}
                             onBlur={() => markTouched("state")}
                             aria-invalid={fieldErrors.state ? "true" : "false"}
+                            required
                           >
                             <option value="">Select state/province</option>
                             {stateOptions.map((state) => (
@@ -1032,6 +1039,7 @@ export default function SaveTheDatePage() {
                             onBlur={() => markTouched("postalCode")}
                             aria-invalid={fieldErrors.postalCode ? "true" : "false"}
                             autoComplete="postal-code"
+                            required
                           />
                           {fieldErrors.postalCode && <p className="rsvp-field-error">{fieldErrors.postalCode}</p>}
                         </label>
@@ -1043,6 +1051,7 @@ export default function SaveTheDatePage() {
                             onChange={(e) => updateValue("country", e.target.value)}
                             onBlur={() => markTouched("country")}
                             aria-invalid={fieldErrors.country ? "true" : "false"}
+                            required
                           >
                             {COUNTRY_OPTIONS.map((country) => (
                               <option key={country} value={country}>{country}</option>
@@ -1063,6 +1072,7 @@ export default function SaveTheDatePage() {
                                   checked={values.likelyAttend === option}
                                   onChange={(e) => updateValue("likelyAttend", e.target.value)}
                                   onBlur={() => markTouched("likelyAttend")}
+                                  required
                                 />
                                 <span>{option}</span>
                               </label>
@@ -1083,6 +1093,7 @@ export default function SaveTheDatePage() {
                                   checked={values.physicalInvite === option}
                                   onChange={(e) => updateValue("physicalInvite", e.target.value)}
                                   onBlur={() => markTouched("physicalInvite")}
+                                  required
                                 />
                                 <span>{option}</span>
                               </label>
