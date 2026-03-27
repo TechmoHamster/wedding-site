@@ -61,7 +61,6 @@ export const DEFAULT_SETTINGS: Settings = {
       options: ["1", "2", "3", "4", "5+"],
       showWhen: { fieldId: "rsvp", values: ["Yes"] },
     },
-    { id: "physicalInvite", label: "Would you like a physical invite?", type: "radio", required: true, width: "full", placeholder: "", autocomplete: "", defaultValue: "", options: ["Yes", "No"] },
     { id: "message", label: "Message for the Couple (optional)", type: "textarea", required: false, width: "full", placeholder: "", autocomplete: "", defaultValue: "" },
   ],
   integrations: {

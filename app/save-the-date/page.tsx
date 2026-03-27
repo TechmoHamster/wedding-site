@@ -8,6 +8,17 @@ import {
   getStateOptionsForCountry,
   normalizeCountryName,
 } from "@/lib/addressOptions";
+import {
+  DEFAULT_PHONE_COUNTRY,
+  PHONE_COUNTRIES,
+  formatNationalNumberDisplay,
+  getDialCode,
+  normalizeNationalNumberInput,
+  isValidInternationalPhone,
+  parseStoredPhoneToUi,
+  toE164FromUi,
+} from "@/lib/phone";
+import type { CountryCode } from "libphonenumber-js";
 
 type StatusType = "" | "error" | "success";
 
@@ -15,6 +26,7 @@ type SaveDateValues = {
   firstName: string;
   lastName: string;
   email: string;
+  phone: string;
   street1: string;
   street2: string;
   city: string;
@@ -23,6 +35,22 @@ type SaveDateValues = {
   country: string;
   likelyAttend: string;
   physicalInvite: string;
+};
+
+type AddressSuggestion = {
+  street1: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  formatted: string;
+};
+
+type AddressVerifyResponse = {
+  ok: boolean;
+  matchType: "confirmed" | "suggested" | "not_found" | "unavailable";
+  message: string;
+  suggestion?: AddressSuggestion;
 };
 
 type AddressPrediction = {
@@ -41,6 +69,7 @@ const INITIAL_VALUES: SaveDateValues = {
   firstName: "",
   lastName: "",
   email: "",
+  phone: "",
   street1: "",
   street2: "",
   city: "",
@@ -51,12 +80,74 @@ const INITIAL_VALUES: SaveDateValues = {
   physicalInvite: "",
 };
 
+type FieldErrors = Partial<Record<keyof SaveDateValues, string>>;
+type TouchedState = Partial<Record<keyof SaveDateValues, boolean>>;
+
+const VALIDATION_ORDER: Array<keyof SaveDateValues> = [
+  "firstName",
+  "lastName",
+  "email",
+  "phone",
+  "street1",
+  "city",
+  "state",
+  "postalCode",
+  "country",
+  "likelyAttend",
+  "physicalInvite",
+];
+
 function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function validateField(field: keyof SaveDateValues, values: SaveDateValues): string {
+  const value = (values[field] || "").trim();
+
+  if (field === "street2") return "";
+
+  if (field === "phone") {
+    if (!value) return "";
+    return isValidInternationalPhone(value) ? "" : "Phone Number must be valid.";
+  }
+
+  if (!value) {
+    switch (field) {
+      case "firstName": return "First Name is required.";
+      case "lastName": return "Last Name is required.";
+      case "email": return "Email is required.";
+      case "street1": return "Street Address is required.";
+      case "city": return "City is required.";
+      case "state": return "State / Province is required.";
+      case "postalCode": return "ZIP / Postal Code is required.";
+      case "country": return "Country is required.";
+      case "likelyAttend": return "Are You Likely to Attend? is required.";
+      case "physicalInvite": return "Would You Like a Mailed Invitation? is required.";
+      default: return "";
+    }
+  }
+
+  if (field === "email" && !isValidEmail(value)) {
+    return "Email must be valid.";
+  }
+
+  return "";
+}
+
+function computeErrors(values: SaveDateValues, touched: TouchedState, forceAll = false): FieldErrors {
+  const errors: FieldErrors = {};
+  for (const field of VALIDATION_ORDER) {
+    if (!forceAll && !touched[field]) continue;
+    const error = validateField(field, values);
+    if (error) errors[field] = error;
+  }
+  return errors;
+}
+
 export default function SaveTheDatePage() {
   const [values, setValues] = useState<SaveDateValues>(INITIAL_VALUES);
+  const [touched, setTouched] = useState<TouchedState>({});
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [csrfToken, setCsrfToken] = useState("");
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileError, setTurnstileError] = useState("");
@@ -64,9 +155,18 @@ export default function SaveTheDatePage() {
   const [statusType, setStatusType] = useState<StatusType>("");
   const [submitting, setSubmitting] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [lastSubmissionId, setLastSubmissionId] = useState("");
+  const [editingSubmissionId, setEditingSubmissionId] = useState("");
+  const [lastSubmittedValues, setLastSubmittedValues] = useState<SaveDateValues | null>(null);
   const [googlePlacesReady, setGooglePlacesReady] = useState(false);
   const [addressPredictions, setAddressPredictions] = useState<AddressPrediction[]>([]);
   const [showAddressPredictions, setShowAddressPredictions] = useState(false);
+  const [addressVerifyStatus, setAddressVerifyStatus] = useState("");
+  const [addressVerifyLoading, setAddressVerifyLoading] = useState(false);
+  const [addressSuggestion, setAddressSuggestion] = useState<AddressSuggestion | null>(null);
+  const [allowUnverifiedAddress, setAllowUnverifiedAddress] = useState(false);
+  const [phoneCountry, setPhoneCountry] = useState<CountryCode>(DEFAULT_PHONE_COUNTRY);
+  const [phoneNationalNumber, setPhoneNationalNumber] = useState("");
 
   const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -74,10 +174,40 @@ export default function SaveTheDatePage() {
   const isTurnstileVerified = !captchaRequired || Boolean(turnstileToken);
 
   const selectedCountry = normalizeCountryName(values.country || "United States");
-  const stateOptions = useMemo(
-    () => getStateOptionsForCountry(selectedCountry),
-    [selectedCountry],
+  const stateOptions = useMemo(() => getStateOptionsForCountry(selectedCountry), [selectedCountry]);
+
+  const phoneCountryOptions = useMemo(() => {
+    const displayNames = typeof Intl !== "undefined" && "DisplayNames" in Intl
+      ? new Intl.DisplayNames(["en"], { type: "region" })
+      : null;
+
+    return PHONE_COUNTRIES.map((code) => {
+      const name = displayNames?.of(code) || code;
+      return {
+        code,
+        label: `${name} (${getDialCode(code)})`,
+      };
+    });
+  }, []);
+
+  const enteredAddressDisplay = useMemo(
+    () => [values.street1, values.city, values.state, values.postalCode, values.country].filter(Boolean).join(", "),
+    [values.street1, values.city, values.state, values.postalCode, values.country],
   );
+
+  const trackIntegrationWarning = (warnings: string[]) => {
+    void fetch("/api/telemetry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        event: "save_date_integration_warning",
+        payload: { warnings },
+      }),
+      keepalive: true,
+    }).catch(() => {
+      // Ignore telemetry failures.
+    });
+  };
 
   useEffect(() => {
     const loadCsrf = async () => {
@@ -106,6 +236,7 @@ export default function SaveTheDatePage() {
       return;
     }
 
+    let cancelled = false;
     const timeout = window.setTimeout(async () => {
       const maps = (window as Window & { google?: any }).google?.maps;
       if (!maps?.places?.AutocompleteSuggestion) return;
@@ -128,6 +259,8 @@ export default function SaveTheDatePage() {
         } catch {
           response = await maps.places.AutocompleteSuggestion.fetchAutocompleteSuggestions(baseRequest);
         }
+
+        if (cancelled) return;
 
         const suggestions = Array.isArray(response?.suggestions) ? response.suggestions : [];
         const mapped: AddressPrediction[] = suggestions
@@ -156,12 +289,15 @@ export default function SaveTheDatePage() {
         setAddressPredictions(mapped);
         setShowAddressPredictions(mapped.length > 0);
       } catch {
-        setAddressPredictions([]);
-        setShowAddressPredictions(false);
+        if (!cancelled) {
+          setAddressPredictions([]);
+          setShowAddressPredictions(false);
+        }
       }
     }, 220);
 
     return () => {
+      cancelled = true;
       window.clearTimeout(timeout);
     };
   }, [values.street1, selectedCountry, googlePlacesReady, GOOGLE_MAPS_API_KEY]);
@@ -212,6 +348,14 @@ export default function SaveTheDatePage() {
     return () => window.clearInterval(intervalId);
   }, [TURNSTILE_SITE_KEY, showSuccess]);
 
+  const markTouched = (field: keyof SaveDateValues) => {
+    setTouched((prev) => {
+      const next = { ...prev, [field]: true };
+      setFieldErrors(computeErrors(values, next));
+      return next;
+    });
+  };
+
   const parseAddressComponents = (
     components: Array<{ long_name?: string; short_name?: string; longText?: string; shortText?: string; types?: string[] }> = [],
   ) => {
@@ -253,11 +397,16 @@ export default function SaveTheDatePage() {
         next.state = "";
       }
       next.postalCode = parts.postalCode || next.postalCode || "";
+
+      setFieldErrors(computeErrors(next, touched));
       return next;
     });
 
     setAddressPredictions([]);
     setShowAddressPredictions(false);
+    setAddressVerifyStatus("");
+    setAddressSuggestion(null);
+    setAllowUnverifiedAddress(false);
     setStatusMessage("");
     setStatusType("");
   };
@@ -268,7 +417,11 @@ export default function SaveTheDatePage() {
 
     const maps = (window as Window & { google?: any }).google?.maps;
     if (!maps?.places) {
-      setValues((prev) => ({ ...prev, street1: selected.description || prev.street1 }));
+      setValues((prev) => {
+        const next = { ...prev, street1: selected.description || prev.street1 };
+        setFieldErrors(computeErrors(next, touched));
+        return next;
+      });
       setAddressPredictions([]);
       setShowAddressPredictions(false);
       return;
@@ -291,13 +444,25 @@ export default function SaveTheDatePage() {
         }
 
         if (place.formattedAddress) {
-          setValues((prev) => ({ ...prev, street1: place.formattedAddress }));
+          setValues((prev) => {
+            const next = { ...prev, street1: place.formattedAddress };
+            setFieldErrors(computeErrors(next, touched));
+            return next;
+          });
         }
       } catch {
-        setValues((prev) => ({ ...prev, street1: selected.description || prev.street1 }));
+        setValues((prev) => {
+          const next = { ...prev, street1: selected.description || prev.street1 };
+          setFieldErrors(computeErrors(next, touched));
+          return next;
+        });
       }
     } else {
-      setValues((prev) => ({ ...prev, street1: selected.description || prev.street1 }));
+      setValues((prev) => {
+        const next = { ...prev, street1: selected.description || prev.street1 };
+        setFieldErrors(computeErrors(next, touched));
+        return next;
+      });
     }
 
     setAddressPredictions([]);
@@ -315,8 +480,16 @@ export default function SaveTheDatePage() {
           next.state = "";
         }
       }
+
+      setFieldErrors(computeErrors(next, touched));
       return next;
     });
+
+    if (["street1", "city", "state", "postalCode", "country"].includes(field)) {
+      setAddressVerifyStatus("");
+      setAddressSuggestion(null);
+      setAllowUnverifiedAddress(false);
+    }
 
     if (field === "street1") {
       setShowAddressPredictions(true);
@@ -326,49 +499,161 @@ export default function SaveTheDatePage() {
     setStatusType("");
   };
 
-  const validate = (): string[] => {
-    const errors: string[] = [];
-
-    if (!values.firstName.trim()) errors.push("First Name is required.");
-    if (!values.lastName.trim()) errors.push("Last Name is required.");
-    if (!values.email.trim()) {
-      errors.push("Email is required.");
-    } else if (!isValidEmail(values.email.trim())) {
-      errors.push("Email must be valid.");
-    }
-
-    if (!values.street1.trim()) errors.push("Street Address is required.");
-    if (!values.city.trim()) errors.push("City is required.");
-    if (!values.state.trim()) errors.push("State / Province is required.");
-    if (!values.postalCode.trim()) errors.push("ZIP / Postal Code is required.");
-    if (!values.country.trim()) errors.push("Country is required.");
-    if (!values.likelyAttend.trim()) errors.push("Are You Likely to Attend? is required.");
-    if (!values.physicalInvite.trim()) errors.push("Would You Like a Mailed Invitation? is required.");
-
-    return errors;
+  const updatePhoneFromParts = (country: CountryCode, rawNumber: string) => {
+    const normalized = toE164FromUi(country, rawNumber);
+    setValues((prev) => {
+      const next = { ...prev, phone: normalized || "" };
+      setFieldErrors(computeErrors(next, touched));
+      return next;
+    });
   };
 
-  const resetForm = () => {
-    setValues(INITIAL_VALUES);
-    setTurnstileToken("");
-    setTurnstileError("");
+  const handlePhoneCountryChange = (nextCountry: string) => {
+    const normalizedCountry = (nextCountry || DEFAULT_PHONE_COUNTRY) as CountryCode;
+    setPhoneCountry(normalizedCountry);
+    updatePhoneFromParts(normalizedCountry, phoneNationalNumber);
     setStatusMessage("");
     setStatusType("");
+  };
+
+  const handlePhoneNationalChange = (rawValue: string) => {
+    const normalized = normalizeNationalNumberInput(phoneCountry, rawValue);
+    setPhoneCountry(normalized.country);
+    setPhoneNationalNumber(normalized.nationalNumber);
+    updatePhoneFromParts(normalized.country, normalized.nationalNumber);
+
+    setStatusMessage("");
+    setStatusType("");
+  };
+
+  const resetForm = (clearStatus = true) => {
+    setValues(INITIAL_VALUES);
+    const phoneUi = parseStoredPhoneToUi("", DEFAULT_PHONE_COUNTRY);
+    setPhoneCountry(phoneUi.country);
+    setPhoneNationalNumber(phoneUi.nationalNumber);
+    setTouched({});
+    setFieldErrors({});
+    setTurnstileToken("");
+    setTurnstileError("");
+    if (clearStatus) {
+      setStatusMessage("");
+      setStatusType("");
+    }
     setAddressPredictions([]);
     setShowAddressPredictions(false);
+    setAddressVerifyStatus("");
+    setAddressSuggestion(null);
+    setAllowUnverifiedAddress(false);
 
     const t = (window as Window & { turnstile?: { reset: () => void } }).turnstile;
     if (t && typeof t.reset === "function") t.reset();
+  };
+
+  const handleSubmitAnother = () => {
+    setShowSuccess(false);
+    setStatusMessage("");
+    setStatusType("");
+    setLastSubmissionId("");
+    setEditingSubmissionId("");
+    resetForm(false);
+  };
+
+  const handleEditLastResponse = () => {
+    if (!lastSubmittedValues) return;
+    setEditingSubmissionId(lastSubmissionId || "");
+    setValues(lastSubmittedValues);
+    const phoneUi = parseStoredPhoneToUi(lastSubmittedValues.phone || "", DEFAULT_PHONE_COUNTRY);
+    setPhoneCountry(phoneUi.country);
+    setPhoneNationalNumber(phoneUi.nationalNumber);
+    setTouched({});
+    setFieldErrors({});
+    setStatusMessage("");
+    setStatusType("");
+    setShowSuccess(false);
+    setAddressPredictions([]);
+    setShowAddressPredictions(false);
+    setAddressVerifyStatus("");
+    setAddressSuggestion(null);
+    setAllowUnverifiedAddress(false);
+    setTurnstileToken("");
+    setTurnstileError("");
+    const t = (window as Window & { turnstile?: { reset: () => void } }).turnstile;
+    if (t && typeof t.reset === "function") t.reset();
+  };
+
+  const verifyAddress = async (): Promise<Partial<AddressVerifyResponse> | null> => {
+    const street1 = (values.street1 || "").trim();
+    if (!street1) return null;
+
+    setAddressVerifyLoading(true);
+
+    try {
+      const response = await fetch("/api/address/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          street1: values.street1 || "",
+          city: values.city || "",
+          state: values.state || "",
+          postalCode: values.postalCode || "",
+          country: values.country || "United States",
+        }),
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as Partial<AddressVerifyResponse>;
+      if (!response.ok) {
+        throw new Error(typeof payload.message === "string" ? payload.message : "Unable to verify address right now.");
+      }
+
+      return payload;
+    } catch (error) {
+      setAddressVerifyStatus(error instanceof Error ? error.message : "Unable to verify address right now.");
+      return null;
+    } finally {
+      setAddressVerifyLoading(false);
+    }
+  };
+
+  const useSuggestedAddress = () => {
+    if (!addressSuggestion) return;
+    setValues((prev) => {
+      const next = { ...prev };
+      next.street1 = addressSuggestion.street1 || next.street1 || "";
+      next.city = addressSuggestion.city || next.city || "";
+      next.country = normalizeCountryName(addressSuggestion.country || next.country || "United States");
+      const options = getStateOptionsForCountry(next.country);
+      next.state = addressSuggestion.state || next.state || "";
+      if (options.length > 0 && !options.includes(next.state)) {
+        next.state = "";
+      }
+      next.postalCode = addressSuggestion.postalCode || next.postalCode || "";
+      setFieldErrors(computeErrors(next, touched));
+      return next;
+    });
+
+    setAddressVerifyStatus("");
+    setAddressSuggestion(null);
+    setAllowUnverifiedAddress(false);
+  };
+
+  const useEnteredAddress = () => {
+    setAddressVerifyStatus("");
+    setAllowUnverifiedAddress(true);
   };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (submitting) return;
 
-    const errors = validate();
-    if (errors.length > 0) {
+    const allTouched: TouchedState = {};
+    for (const field of VALIDATION_ORDER) allTouched[field] = true;
+    setTouched(allTouched);
+
+    const validationErrors = computeErrors(values, allTouched, true);
+    setFieldErrors(validationErrors);
+    if (Object.keys(validationErrors).length > 0) {
       setStatusType("error");
-      setStatusMessage(errors[0]);
+      setStatusMessage("Please fix the highlighted fields and try again.");
       return;
     }
 
@@ -379,9 +664,27 @@ export default function SaveTheDatePage() {
       return;
     }
 
+    if (!allowUnverifiedAddress && (values.street1 || "").trim()) {
+      const verification = await verifyAddress();
+      if (verification?.matchType === "suggested" && verification.suggestion) {
+        setAddressSuggestion(verification.suggestion);
+        setAddressVerifyStatus("Review and choose one address option.");
+        setStatusType("error");
+        setStatusMessage("Please choose recommended address or keep your entered address before submitting.");
+        return;
+      }
+
+      if (verification?.matchType === "confirmed") {
+        setAddressVerifyStatus("");
+      }
+    }
+
     setSubmitting(true);
     setStatusMessage("");
     setStatusType("");
+    setAddressPredictions([]);
+    setShowAddressPredictions(false);
+    setAllowUnverifiedAddress(false);
 
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -395,6 +698,7 @@ export default function SaveTheDatePage() {
           firstName: values.firstName,
           lastName: values.lastName,
           email: values.email,
+          phone: values.phone,
           street1: values.street1,
           street2: values.street2,
           city: values.city,
@@ -403,12 +707,12 @@ export default function SaveTheDatePage() {
           country: values.country,
           rsvp: values.likelyAttend,
           physicalInvite: values.physicalInvite,
-          phone: "",
           smsOptIn: "No",
           guests: "1",
           message: "",
           website: "",
           turnstileToken,
+          editSubmissionId: editingSubmissionId || "",
         }),
       });
 
@@ -418,12 +722,22 @@ export default function SaveTheDatePage() {
         throw new Error(`${payload.error || "Submission failed."}${details}`);
       }
 
+      if (Array.isArray(payload.integrationWarnings) && payload.integrationWarnings.length > 0) {
+        trackIntegrationWarning(payload.integrationWarnings);
+      }
+
+      let message = "Thanks - your mailing info has been received. We'll send your formal invitation closer to the wedding.";
+      if (payload && typeof payload === "object" && payload.updated === true) {
+        message = "Your save-the-date response was updated.";
+      }
+
       setStatusType("success");
       setShowSuccess(true);
-      setStatusMessage(
-        "Thanks - your mailing info has been received. We'll send your formal invitation closer to the wedding.",
-      );
-      resetForm();
+      setStatusMessage(message);
+      setLastSubmissionId(typeof payload.submissionId === "string" ? payload.submissionId : "");
+      setEditingSubmissionId("");
+      setLastSubmittedValues({ ...values });
+      resetForm(false);
     } catch (error) {
       setStatusType("error");
       setStatusMessage(error instanceof Error ? error.message : "Submission failed.");
@@ -460,8 +774,8 @@ export default function SaveTheDatePage() {
             <section className="rsvp-hero-copy save-date-hero-copy">
               <h1 className="rsvp-title">Please Save the Date</h1>
               <p className="rsvp-description">
-                Zach and Erika are getting married. Please save the date and share your mailing address so we can send
-                your formal invitation closer to the wedding.
+                Zach and Erika are getting married. Please share your mailing address so we can send your formal
+                invitation closer to the wedding.
               </p>
               <div className="save-date-details">
                 <p><strong>Zach & Erika&apos;s Wedding</strong></p>
@@ -483,16 +797,14 @@ export default function SaveTheDatePage() {
                     </div>
                     <p className="rsvp-success-title">Info Received</p>
                     <p className="rsvp-success-text">{statusMessage}</p>
-                    <button
-                      type="button"
-                      className="rsvp-success-reset"
-                      onClick={() => {
-                        setShowSuccess(false);
-                        resetForm();
-                      }}
-                    >
+                    <button type="button" className="rsvp-success-reset" onClick={handleSubmitAnother}>
                       Submit Another Response
                     </button>
+                    {lastSubmittedValues && (
+                      <button type="button" className="rsvp-success-edit" onClick={handleEditLastResponse}>
+                        Edit Last Response
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -500,18 +812,72 @@ export default function SaveTheDatePage() {
                       <div className="rsvp-field-grid">
                         <label className="rsvp-field">
                           First Name
-                          <input value={values.firstName} onChange={(e) => updateValue("firstName", e.target.value)} autoComplete="given-name" />
+                          <input
+                            value={values.firstName}
+                            onChange={(e) => updateValue("firstName", e.target.value)}
+                            onBlur={() => markTouched("firstName")}
+                            aria-invalid={fieldErrors.firstName ? "true" : "false"}
+                            autoComplete="given-name"
+                          />
+                          {fieldErrors.firstName && <p className="rsvp-field-error">{fieldErrors.firstName}</p>}
                         </label>
 
                         <label className="rsvp-field">
                           Last Name
-                          <input value={values.lastName} onChange={(e) => updateValue("lastName", e.target.value)} autoComplete="family-name" />
+                          <input
+                            value={values.lastName}
+                            onChange={(e) => updateValue("lastName", e.target.value)}
+                            onBlur={() => markTouched("lastName")}
+                            aria-invalid={fieldErrors.lastName ? "true" : "false"}
+                            autoComplete="family-name"
+                          />
+                          {fieldErrors.lastName && <p className="rsvp-field-error">{fieldErrors.lastName}</p>}
                         </label>
 
                         <label className="rsvp-field full">
                           Email
-                          <input type="email" value={values.email} onChange={(e) => updateValue("email", e.target.value)} autoComplete="email" />
+                          <input
+                            type="email"
+                            value={values.email}
+                            onChange={(e) => updateValue("email", e.target.value)}
+                            onBlur={() => markTouched("email")}
+                            aria-invalid={fieldErrors.email ? "true" : "false"}
+                            autoComplete="email"
+                          />
+                          {fieldErrors.email && <p className="rsvp-field-error">{fieldErrors.email}</p>}
                         </label>
+
+                        <div className="rsvp-field full rsvp-phone-field">
+                          <div className="rsvp-phone-grid">
+                            <label className="rsvp-phone-code">
+                              Country Code
+                              <select
+                                name="phoneCountry"
+                                value={phoneCountry}
+                                onChange={(e) => handlePhoneCountryChange(e.target.value)}
+                                disabled={submitting}
+                              >
+                                {phoneCountryOptions.map((option) => (
+                                  <option key={option.code} value={option.code}>{option.label}</option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="rsvp-phone-number">
+                              Phone Number (optional)
+                              <input
+                                type="tel"
+                                name="phoneNational"
+                                value={formatNationalNumberDisplay(phoneCountry, phoneNationalNumber)}
+                                onChange={(e) => handlePhoneNationalChange(e.target.value)}
+                                onBlur={() => markTouched("phone")}
+                                aria-invalid={fieldErrors.phone ? "true" : "false"}
+                                autoComplete="tel-national"
+                                disabled={submitting}
+                              />
+                            </label>
+                          </div>
+                          {fieldErrors.phone && <p className="rsvp-field-error">{fieldErrors.phone}</p>}
+                        </div>
 
                         <div className="rsvp-field full rsvp-address-block">
                           <label className="rsvp-address-label">
@@ -525,8 +891,10 @@ export default function SaveTheDatePage() {
                                   if (addressPredictions.length > 0) setShowAddressPredictions(true);
                                 }}
                                 onBlur={() => {
+                                  markTouched("street1");
                                   window.setTimeout(() => setShowAddressPredictions(false), 120);
                                 }}
+                                aria-invalid={fieldErrors.street1 ? "true" : "false"}
                                 autoComplete="address-line1"
                               />
 
@@ -549,40 +917,109 @@ export default function SaveTheDatePage() {
                               )}
                             </div>
                           </label>
+                          {fieldErrors.street1 && <p className="rsvp-field-error">{fieldErrors.street1}</p>}
+
+                          {addressSuggestion && (
+                            <div className="rsvp-address-review">
+                              <p className="rsvp-address-review-title">We found a cleaner address format.</p>
+                              <div className="rsvp-address-review-grid">
+                                <div>
+                                  <small>You Entered</small>
+                                  <p>{enteredAddressDisplay || "(No address entered)"}</p>
+                                </div>
+                                <div>
+                                  <small>Recommended</small>
+                                  <p>{addressSuggestion.formatted || `${addressSuggestion.street1}, ${addressSuggestion.city}`}</p>
+                                </div>
+                              </div>
+                              <div className="rsvp-address-actions">
+                                <button
+                                  type="button"
+                                  className="rsvp-address-use-btn"
+                                  onClick={useSuggestedAddress}
+                                  disabled={addressVerifyLoading || submitting}
+                                >
+                                  Use Recommended
+                                </button>
+                                <button
+                                  type="button"
+                                  className="rsvp-address-keep-btn"
+                                  onClick={useEnteredAddress}
+                                  disabled={addressVerifyLoading || submitting}
+                                >
+                                  Keep Mine
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {!addressSuggestion && addressVerifyStatus && (
+                            <p className="rsvp-address-verify-status">{addressVerifyStatus}</p>
+                          )}
                         </div>
 
                         <label className="rsvp-field full">
                           Apartment, Suite, etc. (optional)
-                          <input value={values.street2} onChange={(e) => updateValue("street2", e.target.value)} autoComplete="address-line2" />
+                          <input
+                            value={values.street2}
+                            onChange={(e) => updateValue("street2", e.target.value)}
+                            autoComplete="address-line2"
+                          />
                         </label>
 
                         <label className="rsvp-field">
                           City
-                          <input value={values.city} onChange={(e) => updateValue("city", e.target.value)} autoComplete="address-level2" />
+                          <input
+                            value={values.city}
+                            onChange={(e) => updateValue("city", e.target.value)}
+                            onBlur={() => markTouched("city")}
+                            aria-invalid={fieldErrors.city ? "true" : "false"}
+                            autoComplete="address-level2"
+                          />
+                          {fieldErrors.city && <p className="rsvp-field-error">{fieldErrors.city}</p>}
                         </label>
 
                         <label className="rsvp-field">
                           State / Province
-                          <select value={values.state} onChange={(e) => updateValue("state", e.target.value)}>
+                          <select
+                            value={values.state}
+                            onChange={(e) => updateValue("state", e.target.value)}
+                            onBlur={() => markTouched("state")}
+                            aria-invalid={fieldErrors.state ? "true" : "false"}
+                          >
                             <option value="">Select state/province</option>
                             {stateOptions.map((state) => (
                               <option key={state} value={state}>{state}</option>
                             ))}
                           </select>
+                          {fieldErrors.state && <p className="rsvp-field-error">{fieldErrors.state}</p>}
                         </label>
 
                         <label className="rsvp-field">
                           ZIP / Postal Code
-                          <input value={values.postalCode} onChange={(e) => updateValue("postalCode", e.target.value)} autoComplete="postal-code" />
+                          <input
+                            value={values.postalCode}
+                            onChange={(e) => updateValue("postalCode", e.target.value)}
+                            onBlur={() => markTouched("postalCode")}
+                            aria-invalid={fieldErrors.postalCode ? "true" : "false"}
+                            autoComplete="postal-code"
+                          />
+                          {fieldErrors.postalCode && <p className="rsvp-field-error">{fieldErrors.postalCode}</p>}
                         </label>
 
                         <label className="rsvp-field">
                           Country
-                          <select value={values.country} onChange={(e) => updateValue("country", e.target.value)}>
+                          <select
+                            value={values.country}
+                            onChange={(e) => updateValue("country", e.target.value)}
+                            onBlur={() => markTouched("country")}
+                            aria-invalid={fieldErrors.country ? "true" : "false"}
+                          >
                             {COUNTRY_OPTIONS.map((country) => (
                               <option key={country} value={country}>{country}</option>
                             ))}
                           </select>
+                          {fieldErrors.country && <p className="rsvp-field-error">{fieldErrors.country}</p>}
                         </label>
 
                         <fieldset className="rsvp-radio-field full">
@@ -596,11 +1033,13 @@ export default function SaveTheDatePage() {
                                   value={option}
                                   checked={values.likelyAttend === option}
                                   onChange={(e) => updateValue("likelyAttend", e.target.value)}
+                                  onBlur={() => markTouched("likelyAttend")}
                                 />
                                 <span>{option}</span>
                               </label>
                             ))}
                           </div>
+                          {fieldErrors.likelyAttend && <p className="rsvp-field-error">{fieldErrors.likelyAttend}</p>}
                         </fieldset>
 
                         <fieldset className="rsvp-radio-field full">
@@ -614,11 +1053,13 @@ export default function SaveTheDatePage() {
                                   value={option}
                                   checked={values.physicalInvite === option}
                                   onChange={(e) => updateValue("physicalInvite", e.target.value)}
+                                  onBlur={() => markTouched("physicalInvite")}
                                 />
                                 <span>{option}</span>
                               </label>
                             ))}
                           </div>
+                          {fieldErrors.physicalInvite && <p className="rsvp-field-error">{fieldErrors.physicalInvite}</p>}
                         </fieldset>
                       </div>
                     </fieldset>

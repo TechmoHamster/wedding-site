@@ -160,20 +160,6 @@
       }
     },
     {
-      "id": "physicalInvite",
-      "label": "Would you like a physical invite?",
-      "type": "radio",
-      "required": true,
-      "width": "full",
-      "placeholder": "",
-      "autocomplete": "",
-      "defaultValue": "",
-      "options": [
-        "Yes",
-        "No"
-      ]
-    },
-    {
       "id": "message",
       "label": "Message for the Couple (optional)",
       "type": "textarea",

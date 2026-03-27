@@ -78,10 +78,10 @@ function doPost(e) {
     ];
     submissionIdColumnIndex = 12; // M (0-indexed)
   } else {
-    // RSVP tab mapping:
+    // RSVP tab mapping (physical invite removed):
     // A firstName, B lastName, C email, D phone, E smsOptIn,
     // F street1, G street2, H city, I postalCode, J state, K country,
-    // L rsvp, M guests, N physicalInvite, O message, P submissionId
+    // L rsvp, M guests, N message, O reserved, P submissionId
     rowData = [
       valuesObj.firstName || "",
       valuesObj.lastName || "",
@@ -96,8 +96,8 @@ function doPost(e) {
       valuesObj.country || "",
       normalizeOption(valuesObj.rsvp, ["Yes", "No", "Maybe"]),
       valuesObj.guests || "",
-      normalizeOption(valuesObj.physicalInvite, ["Yes", "No"]),
       valuesObj.message || "",
+      "",
       submissionId
     ];
     submissionIdColumnIndex = 15; // P (0-indexed)
@@ -108,7 +108,16 @@ function doPost(e) {
     var foundRow = -1;
 
     for (var r = 1; r < all.length; r++) {
-      if (String(all[r][submissionIdColumnIndex] || "").trim() === submissionId) {
+      var currentId = String(all[r][submissionIdColumnIndex] || "").trim();
+      // Fallback for RSVP rows written during prior mappings.
+      if (!currentId && formKey !== "save_the_date") {
+        currentId = String(all[r][14] || "").trim(); // O
+      }
+      if (!currentId && formKey !== "save_the_date") {
+        currentId = String(all[r][15] || "").trim(); // P
+      }
+
+      if (currentId === submissionId) {
         foundRow = r + 1;
         break;
       }
