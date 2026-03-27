@@ -61,7 +61,7 @@ export const DEFAULT_SETTINGS: Settings = {
       options: ["1", "2", "3", "4", "5+"],
       showWhen: { fieldId: "rsvp", values: ["Yes"] },
     },
-    { id: "physicalInvite", label: "Would you like a physical invite?", type: "radio", required: false, width: "full", placeholder: "", autocomplete: "", defaultValue: "No", options: ["Yes", "No"] },
+    { id: "physicalInvite", label: "Would you like a physical invite?", type: "radio", required: true, width: "full", placeholder: "", autocomplete: "", defaultValue: "", options: ["Yes", "No"] },
     { id: "message", label: "Message for the Couple (optional)", type: "textarea", required: false, width: "full", placeholder: "", autocomplete: "", defaultValue: "" },
   ],
   integrations: {
@@ -392,6 +392,7 @@ export function findRecentDuplicateSubmission(
 export async function checkDuplicateInGoogleSheets(
   values: Record<string, string>,
   settings: Settings,
+  formKey: "rsvp" | "save_the_date" = "rsvp",
 ): Promise<{ checked: boolean; duplicate: boolean; message: string }> {
   const webhookUrl = (settings.integrations.googleSheetsWebhookUrl || "").trim();
   if (!webhookUrl) {
@@ -419,6 +420,7 @@ export async function checkDuplicateInGoogleSheets(
       headers,
       body: JSON.stringify({
         mode: "duplicate_check",
+        formKey,
         lookup,
       }),
       cache: "no-store",
@@ -523,6 +525,7 @@ export function buildCsv(submissions: SubmissionRecord[], settings: Settings): s
 export async function forwardToIntegrations(
   submission: Pick<SubmissionRecord, "id" | "submittedAt" | "values"> & {
     mode?: "append_submission" | "upsert_submission";
+    formKey?: "rsvp" | "save_the_date";
   },
   settings: Settings,
 ): Promise<SubmissionRecord["integrations"]> {
@@ -551,6 +554,7 @@ export async function forwardToIntegrations(
         headers,
         body: JSON.stringify({
           mode: submission.mode || "append_submission",
+          formKey: submission.formKey || "rsvp",
           submittedAt: submission.submittedAt,
           id: submission.id,
           values: submission.values,

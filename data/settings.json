@@ -163,11 +163,11 @@
       "id": "physicalInvite",
       "label": "Would you like a physical invite?",
       "type": "radio",
-      "required": false,
+      "required": true,
       "width": "full",
       "placeholder": "",
       "autocomplete": "",
-      "defaultValue": "No",
+      "defaultValue": "",
       "options": [
         "Yes",
         "No"

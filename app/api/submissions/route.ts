@@ -77,6 +77,12 @@ export async function POST(request: Request) {
       : "";
   const isEditMode = Boolean(editSubmissionId);
 
+  const formKey =
+    payload && typeof payload === "object" && typeof (payload as { formKey?: unknown }).formKey === "string"
+      ? (payload as { formKey: string }).formKey.trim().toLowerCase()
+      : "rsvp";
+  const normalizedFormKey = formKey === "save_the_date" ? "save_the_date" : "rsvp";
+
   const captcha = await verifyTurnstileToken(turnstileToken, ip);
   if (!captcha.ok) {
     return NextResponse.json({ error: captcha.reason }, { status: 400 });
@@ -98,7 +104,7 @@ export async function POST(request: Request) {
   if (!isEditMode) {
     const duplicate = findRecentDuplicateSubmission(values, existing);
     if (duplicate) {
-      const sheetCheck = await checkDuplicateInGoogleSheets(values, settings);
+      const sheetCheck = await checkDuplicateInGoogleSheets(values, settings, normalizedFormKey);
       if (sheetCheck.checked && sheetCheck.duplicate) {
         return NextResponse.json(
           {
@@ -128,7 +134,7 @@ export async function POST(request: Request) {
   };
 
   submission.integrations = await forwardToIntegrations(
-    { ...submission, mode: isEditMode ? "upsert_submission" : "append_submission" },
+    { ...submission, mode: isEditMode ? "upsert_submission" : "append_submission", formKey: normalizedFormKey },
     settings,
   );
   if (submission.integrations.googleSheets.enabled && submission.integrations.googleSheets.ok === false) {
@@ -162,6 +168,7 @@ export async function POST(request: Request) {
       message: settings.branding.successMessage,
       integrationWarnings: submission.warnings,
       updated: isEditMode,
+      formKey: normalizedFormKey,
     },
     {
       status: 201,

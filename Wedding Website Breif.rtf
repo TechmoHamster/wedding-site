@@ -1,0 +1,165 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2868
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww11860\viewh9460\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 PROJECT BRIEF \'97 PRIMARY DOMAIN (PUBLIC WEDDING WEBSITE)\
+\
+Project:\
+Build the public-facing wedding website. This site must be fully controlled by a separate admin dashboard hosted on a protected subdomain.\
+\
+Core Philosophy:\
+The primary website is NOT the source of truth.\
+It is a rendering layer.\
+\
+All dynamic behavior, content, form structure, and feature visibility must be controlled externally via Supabase.\
+\
+All guest submissions must continue to be written to Google Sheets.\
+\
+------------------------------------------\
+ARCHITECTURE OVERVIEW\
+------------------------------------------\
+\
+Reads from:\
+- Supabase (site config, content, form definitions)\
+\
+Writes to:\
+- Google Sheets (via backend API)\
+\
+------------------------------------------\
+CORE REQUIREMENTS\
+------------------------------------------\
+\
+1. CONFIG-DRIVEN RENDERING\
+\
+The website must dynamically render based on Supabase data.\
+\
+DO NOT hardcode:\
+- form fields\
+- FAQ content\
+- banners\
+- section visibility\
+- registry links\
+- travel info\
+\
+Instead fetch from API:\
+- site_settings\
+- content_blocks\
+- forms\
+- form_fields\
+\
+------------------------------------------\
+\
+2. FORM SYSTEM (DYNAMIC)\
+\
+Forms must be generated dynamically from Supabase config.\
+\
+Each form:\
+- defined in `forms` table\
+- fields defined in `form_fields`\
+\
+Each field includes:\
+- key (stable identifier)\
+- label\
+- type (text, email, select, etc.)\
+- required (boolean)\
+- visible (boolean)\
+- placeholder\
+- order\
+\
+Forms to support:\
+- Save-the-Date\
+- RSVP\
+\
+------------------------------------------\
+\
+3. FORM SUBMISSION PIPELINE\
+\
+IMPORTANT: Do NOT change existing Google Sheets workflow.\
+\
+Flow:\
+- User submits form\
+- Primary site sends submission to backend API\
+- Backend writes to Google Sheets\
+\
+Use Node.js Google Sheets API (server-side only)\
+- No client-side credentials exposure\
+- Use service account\
+\
+Reference:\
+Google provides Node.js client libraries for securely accessing Sheets API server-side. :contentReference[oaicite:0]\{index=0\}\
+\
+------------------------------------------\
+\
+4. SITE SETTINGS (SUPABASE-DRIVEN)\
+\
+Fetch global settings such as:\
+- rsvp_open\
+- save_the_date_open\
+- show_registry\
+- show_travel\
+- banner_enabled\
+- banner_text\
+\
+Rendering logic:\
+- If rsvp_open = false \uc0\u8594  hide RSVP form\
+- If banner_enabled = true \uc0\u8594  show banner\
+- If show_registry = false \uc0\u8594  hide section\
+\
+------------------------------------------\
+\
+5. CONTENT BLOCKS\
+\
+All editable content must come from Supabase:\
+- homepage text\
+- announcements\
+- FAQ\
+- travel info\
+- registry\
+\
+------------------------------------------\
+\
+6. ERROR HANDLING\
+\
+- Handle missing config gracefully\
+- Handle API failures\
+- Handle form submission errors\
+- Provide user feedback states\
+\
+------------------------------------------\
+\
+7. SECURITY\
+\
+- No Supabase admin keys in frontend\
+- No Google credentials in frontend\
+- All sensitive operations handled server-side\
+- Input validation required\
+\
+------------------------------------------\
+\
+8. PERFORMANCE\
+\
+- Cache config where appropriate\
+- Allow revalidation if needed\
+\
+------------------------------------------\
+\
+FINAL RULE:\
+\
+The public site must behave like a \'93dumb renderer\'94 that:\
+- pulls instructions from Supabase\
+- sends submissions to Google Sheets\
+\
+No business logic or control logic should live here.\
+\
+------------------------------------------\
+\
+DELIVERABLES:\
+\
+- Public frontend app\
+- Dynamic rendering system (Supabase-driven)\
+- Dynamic form builder (from Supabase schema)\
+- Submission pipeline to Google Sheets\
+- Conditional rendering based on settings}
