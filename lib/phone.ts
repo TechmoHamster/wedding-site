@@ -82,6 +82,12 @@ export function normalizeNationalNumberInput(
   const digitsOnly = input.replace(/\D/g, "");
   if (!digitsOnly) return { country, nationalNumber: "" };
 
+  // For NANP-style local entry, keep the selected country and
+  // treat leading "1" as trunk prefix instead of inferring a new country.
+  if (digitsOnly.length === 11 && digitsOnly.startsWith("1")) {
+    return { country, nationalNumber: digitsOnly.slice(1) };
+  }
+
   let internationalCandidate = "";
   if (input.startsWith("00") && digitsOnly.length > 2) {
     internationalCandidate = `+${digitsOnly.slice(2)}`;
