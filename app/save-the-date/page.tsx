@@ -169,6 +169,7 @@ export default function SaveTheDatePage() {
   const [phoneNationalNumber, setPhoneNationalNumber] = useState("");
 
   const turnstileContainerRef = useRef<HTMLDivElement | null>(null);
+  const phoneCountryIntentRef = useRef(false);
 
   const captchaRequired = Boolean(TURNSTILE_SITE_KEY);
   const isTurnstileVerified = !captchaRequired || Boolean(turnstileToken);
@@ -515,11 +516,29 @@ export default function SaveTheDatePage() {
     setStatusType("");
   };
 
+  const markPhoneCountryIntent = () => {
+    phoneCountryIntentRef.current = true;
+  };
+
+  const clearPhoneCountryIntent = () => {
+    phoneCountryIntentRef.current = false;
+  };
+
   const handlePhoneNationalChange = (rawValue: string) => {
     const normalized = normalizeNationalNumberInput(phoneCountry, rawValue);
-    setPhoneCountry(normalized.country);
+
+    const rawTrimmed = (rawValue || "").trim();
+    const digitsOnly = rawTrimmed.replace(/\D/g, "");
+    const hasExplicitInternationalPrefix = rawTrimmed.startsWith("+") || rawTrimmed.startsWith("00");
+    const looksLikeNanp = digitsOnly.length === 10 || (digitsOnly.length === 11 && digitsOnly.startsWith("1"));
+
+    const nextCountry = (!hasExplicitInternationalPrefix && looksLikeNanp)
+      ? DEFAULT_PHONE_COUNTRY
+      : normalized.country;
+
+    setPhoneCountry(nextCountry);
     setPhoneNationalNumber(normalized.nationalNumber);
-    updatePhoneFromParts(normalized.country, normalized.nationalNumber);
+    updatePhoneFromParts(nextCountry, normalized.nationalNumber);
 
     setStatusMessage("");
     setStatusType("");
@@ -851,9 +870,20 @@ export default function SaveTheDatePage() {
                             <label className="rsvp-phone-code">
                               Country Code
                               <select
-                                name="phoneCountry"
+                                name="phoneCountrySelector"
+                                autoComplete="new-password"
                                 value={phoneCountry}
-                                onChange={(e) => handlePhoneCountryChange(e.target.value)}
+                                onPointerDown={markPhoneCountryIntent}
+                                onKeyDown={markPhoneCountryIntent}
+                                onChange={(e) => {
+                                  if (!phoneCountryIntentRef.current) return;
+                                  clearPhoneCountryIntent();
+                                  handlePhoneCountryChange(e.target.value);
+                                }}
+                                onBlur={() => {
+                                  clearPhoneCountryIntent();
+                                  markTouched("phone");
+                                }}
                                 disabled={submitting}
                               >
                                 {phoneCountryOptions.map((option) => (
