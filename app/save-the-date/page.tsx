@@ -287,7 +287,6 @@ export default function SaveTheDatePage() {
           .filter((item: AddressPrediction | null): item is AddressPrediction => Boolean(item));
 
         setAddressPredictions(mapped);
-        setShowAddressPredictions(mapped.length > 0);
       } catch {
         if (!cancelled) {
           setAddressPredictions([]);

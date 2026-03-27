@@ -58,13 +58,14 @@ function doPost(e) {
 
   if (formKey === "save_the_date") {
     // Save The Date tab mapping:
-    // A firstName, B lastName, C email, D street1, E street2,
-    // F city, G postalCode, H state, I country,
-    // J likelyAttend (rsvp), K physicalInvite, L submittedAt, M submissionId
+    // A firstName, B lastName, C email, D phone, E street1, F street2,
+    // G city, H postalCode, I state, J country,
+    // K likelyAttend (rsvp), L physicalInvite, M submittedAt, N submissionId
     rowData = [
       valuesObj.firstName || "",
       valuesObj.lastName || "",
       valuesObj.email || "",
+      valuesObj.phone || "",
       valuesObj.street1 || "",
       valuesObj.street2 || "",
       valuesObj.city || "",
@@ -76,7 +77,7 @@ function doPost(e) {
       body.submittedAt || "",
       submissionId
     ];
-    submissionIdColumnIndex = 12; // M (0-indexed)
+    submissionIdColumnIndex = 13; // N (0-indexed)
   } else {
     // RSVP tab mapping (physical invite removed):
     // A firstName, B lastName, C email, D phone, E smsOptIn,
@@ -109,7 +110,10 @@ function doPost(e) {
 
     for (var r = 1; r < all.length; r++) {
       var currentId = String(all[r][submissionIdColumnIndex] || "").trim();
-      // Fallback for RSVP rows written during prior mappings.
+      // Fallback for rows written during prior mappings.
+      if (!currentId && formKey === "save_the_date") {
+        currentId = String(all[r][12] || "").trim(); // M (legacy save-the-date)
+      }
       if (!currentId && formKey !== "save_the_date") {
         currentId = String(all[r][14] || "").trim(); // O
       }

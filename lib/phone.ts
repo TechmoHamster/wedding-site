@@ -19,6 +19,21 @@ export function getDialCode(country: CountryCode): string {
   return `+${getCountryCallingCode(country)}`;
 }
 
+function resolveCountryWithFallback(
+  parsedCountry: CountryCode | undefined,
+  parsedCallingCode: string | undefined,
+  fallbackCountry: CountryCode,
+): CountryCode {
+  if (parsedCountry) {
+    const fallbackCallingCode = getCountryCallingCode(fallbackCountry);
+    if (parsedCallingCode && parsedCallingCode === fallbackCallingCode) {
+      return fallbackCountry;
+    }
+    return parsedCountry;
+  }
+  return fallbackCountry;
+}
+
 export function parseStoredPhoneToUi(value: string, fallbackCountry: CountryCode = DEFAULT_PHONE_COUNTRY): PhoneUiState {
   const input = (value || "").trim();
   if (!input) return { country: fallbackCountry, nationalNumber: "" };
@@ -26,7 +41,11 @@ export function parseStoredPhoneToUi(value: string, fallbackCountry: CountryCode
   const parsed = parsePhoneNumberFromString(input);
   if (parsed) {
     return {
-      country: (parsed.country as CountryCode) || fallbackCountry,
+      country: resolveCountryWithFallback(
+        parsed.country as CountryCode | undefined,
+        parsed.countryCallingCode,
+        fallbackCountry,
+      ),
       nationalNumber: parsed.nationalNumber || "",
     };
   }
@@ -59,7 +78,11 @@ export function inferCountryAndNational(
     const parsed = parsePhoneNumberFromString(input);
     if (parsed) {
       return {
-        country: (parsed.country as CountryCode) || fallbackCountry,
+        country: resolveCountryWithFallback(
+          parsed.country as CountryCode | undefined,
+          parsed.countryCallingCode,
+          fallbackCountry,
+        ),
         nationalNumber: parsed.nationalNumber || "",
       };
     }
